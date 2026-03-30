@@ -284,9 +284,6 @@ Polars infers types from the first 100 rows. If your CSV has mixed types, ensure
 
 Contributions welcome! Please open issues for bugs or feature requests.
 
-## License
-
-(Add your license here—e.g., MIT, Apache 2.0)
 
 ## Roadmap
 
