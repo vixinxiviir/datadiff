@@ -18,7 +18,7 @@ Compare schemas for breaking changes, find modified rows with configurable toler
 ### From Source
 
 ```bash
-git clone https://github.com/<your-org>/datadiff.git
+git clone https://github.com/vixinxiviir/datadiff.git
 cd datadiff
 cargo install --path .
 ```
