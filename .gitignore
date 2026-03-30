@@ -1,0 +1,24 @@
+# Rust build artifacts
+/target/
+
+# Generated run outputs
+/outputs-*/
+/myresults/
+
+# Local virtual environments
+/.venv/
+
+# Local tooling/editor folders
+/.vscode/
+/.continue/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Env/config secrets
+.env
+.env.*
+!.env.example
