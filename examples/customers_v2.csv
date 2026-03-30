@@ -1,0 +1,6 @@
+customer_id,name,email,created_at,lifetime_value,country,last_purchase_date
+1,Alice Smith,alice@example.com,2025-01-15,1250.50,US,2026-03-20
+2,Robert Jones,bob@example.com,2025-02-03,890.75,CA,2026-02-14
+3,Carol White,carol@example.com,2025-02-10,2100.00,US,2026-03-18
+4,David Brown,david@example.com,2025-03-01,450.75,UK,2026-01-30
+6,Frank Miller,frank@example.com,2025-03-08,1500.25,US,2026-03-15

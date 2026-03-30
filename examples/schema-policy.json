@@ -1,0 +1,11 @@
+{
+  "required_columns_source": ["customer_id", "name", "email"],
+  "required_columns_target": ["customer_id", "name", "email"],
+  "forbidden_removals": ["customer_id", "email"],
+  "max_new_columns": 10,
+  "allowed_type_changes": [
+    { "from": "Int32", "to": "Int64" },
+    { "from": "Float32", "to": "Float64" }
+  ],
+  "fail_on_breaking": false
+}

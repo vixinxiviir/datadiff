@@ -1,0 +1,8 @@
+[
+  {
+    "name": "customers_v1_to_v2",
+    "source": "examples/customers_v1.csv",
+    "target": "examples/customers_v2.csv",
+    "key": "customer_id"
+  }
+]

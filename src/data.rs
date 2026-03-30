@@ -25,6 +25,59 @@ pub enum ManifestFormat {
     Csv,
 }
 
+#[derive(Clone, Debug)]
+pub enum DataDiffError {
+    CLICommandError(String),
+    MissingKeyColumn(String),
+    DataContentError(String),
+    FileNotFound(String),
+    InvalidManifestEntry(String),
+    SchemaMismatch(String),
+}
+
+impl std::fmt::Display for DataDiffError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DataDiffError::CLICommandError(msg) => write!(f, "CLI command error: {}", msg),
+            DataDiffError::MissingKeyColumn(col) => {
+                write!(f, "Missing key column: {} does not exist in data", col)
+            }
+            DataDiffError::DataContentError(msg) => write!(f, "Error while processing data: {}", msg),
+            DataDiffError::FileNotFound(path) => write!(f, "File not found: {}", path),
+            DataDiffError::InvalidManifestEntry(msg) => {
+                write!(f, "Invalid manifest entry: {}", msg)
+            }
+            DataDiffError::SchemaMismatch(msg) => write!(f, "Schema mismatch: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for DataDiffError {}
+
+impl From<std::io::Error> for DataDiffError {
+    fn from(err: std::io::Error) -> Self {
+        DataDiffError::FileNotFound(err.to_string())
+    }
+}
+
+impl From<polars::error::PolarsError> for DataDiffError {
+    fn from(err: polars::error::PolarsError) -> Self {
+        DataDiffError::DataContentError(err.to_string())
+    }
+}
+
+impl From<serde_json::Error> for DataDiffError {
+    fn from(err: serde_json::Error) -> Self {
+        DataDiffError::InvalidManifestEntry(err.to_string())
+    }
+}
+
+impl From<anyhow::Error> for DataDiffError {
+    fn from(err: anyhow::Error) -> Self {
+        DataDiffError::DataContentError(err.to_string())
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 struct RowSummary {
     source_rows: usize,
@@ -205,7 +258,7 @@ fn parse_column_list(columns: Option<&str>) -> HashSet<String> {
     }
 }
 
-fn parse_manifest_keys(raw_keys: &str) -> Result<Vec<String>> {
+fn parse_manifest_keys(raw_keys: &str) -> Result<Vec<String>, DataDiffError> {
     let parsed: Vec<String> = raw_keys
         .split(',')
         .map(|value| value.trim())
@@ -214,7 +267,9 @@ fn parse_manifest_keys(raw_keys: &str) -> Result<Vec<String>> {
         .collect();
 
     if parsed.is_empty() {
-        return Err(anyhow!("Batch manifest entry has an empty key override"));
+        return Err(DataDiffError::InvalidManifestEntry(
+            "Batch manifest entry has an empty key override".to_string(),
+        ));
     }
 
     Ok(parsed)
@@ -445,13 +500,15 @@ fn compute_diff_export(
     path2: &str,
     keys: &[String],
     options: &DiffComputationOptions<'_>,
-) -> Result<DiffExport> {
+) -> Result<DiffExport, DataDiffError> {
     // Parse column filters
     let exclude_set = parse_column_list(options.exclude_columns);
     let only_set = parse_column_list(options.only_columns);
 
     if !exclude_set.is_empty() && !only_set.is_empty() {
-        return Err(anyhow!("Cannot use both --exclude-columns and --only-columns"));
+        return Err(DataDiffError::CLICommandError(
+            "Cannot use both --exclude-columns and --only-columns".to_string(),
+        ));
     }
 
     let df1 = CsvReader::from_path(path1)?
@@ -467,10 +524,10 @@ fn compute_diff_export(
     // Validate that all key columns exist in both dataframes
     for key in keys {
         if !df1.get_column_names().contains(&key.as_str()) {
-            return Err(anyhow!("Key column '{}' not found in source file", key));
+            return Err(DataDiffError::MissingKeyColumn(format!("Key column '{}' not found in source file: {}", key, path1)));
         }
         if !df2.get_column_names().contains(&key.as_str()) {
-            return Err(anyhow!("Key column '{}' not found in target file", key));
+            return Err(DataDiffError::MissingKeyColumn(format!("Key column '{}' not found in target file: {}", key, path2)));
         }
     }
 
