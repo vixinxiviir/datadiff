@@ -1,9 +1,13 @@
 # Rust build artifacts
 /target/
+tauri-app/src-tauri/target/
 
 # Generated run outputs
 /outputs-*/
 /myresults/
+
+# Tauri generated icons (regenerated from source)
+tauri-app/src-tauri/icons/
 
 # Local virtual environments
 /.venv/
@@ -17,8 +21,21 @@
 Thumbs.db
 *.swp
 *.swo
+desktop.ini
 
 # Env/config secrets
 .env
 .env.*
 !.env.example
+
+# Cargo lock for libraries (keep for binaries/apps — this repo has both)
+# Cargo.lock is intentionally tracked
+
+# Tauri WiX/NSIS installer intermediates
+tauri-app/src-tauri/WixTools/
+tauri-app/src-tauri/*.msi
+tauri-app/src-tauri/*.exe
+
+# Node (if npm is ever added)
+node_modules/
+tauri-app/node_modules/

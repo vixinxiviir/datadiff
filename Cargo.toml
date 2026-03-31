@@ -3,6 +3,14 @@ name = "datadiff"
 version = "0.2.0"
 edition = "2021"
 
+[[bin]]
+name = "datadiff"
+path = "src/main.rs"
+
+[lib]
+name = "datadiff"
+path = "src/lib.rs"
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 polars = { version = "0.39", features = ["lazy", "csv", "parquet", "streaming"] }

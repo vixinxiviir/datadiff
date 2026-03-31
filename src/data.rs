@@ -1337,6 +1337,26 @@ pub fn validate_export_args(output: Option<&str>, format: Option<&ExportFormat>,
     }
 }
 
+/// High-level diff entry point for use by the Tauri GUI (and other embedders).
+/// Returns the full diff result as a JSON value — no terminal rendering, no file export.
+pub fn run_diff(
+    path1: &str,
+    path2: &str,
+    keys: &[String],
+    exclude_columns: Option<&str>,
+    only_columns: Option<&str>,
+    numeric_tolerance: Option<f64>,
+) -> Result<serde_json::Value, DataDiffError> {
+    let options = DiffComputationOptions {
+        exclude_columns,
+        only_columns,
+        numeric_tolerance,
+        include_column_stats: true,
+    };
+    let payload = compute_diff_export(path1, path2, keys, &options)?;
+    serde_json::to_value(&payload).map_err(|e| DataDiffError::CLICommandError(e.to_string()))
+}
+
 fn prompt_for_export(path1: &str, path2: &str) -> Result<Option<(String, ExportFormat)>> {
     println!("\nSave these diff results? [y/N]");
     print!("> ");

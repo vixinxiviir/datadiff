@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DataDiff</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+  <style>
+    body { max-width: 960px; margin: 0 auto; padding: 1rem 2rem; }
+    h1 { margin-bottom: 0.25rem; }
+    .subtitle { color: var(--pico-muted-color); margin-bottom: 2rem; }
+    .file-row { display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end; }
+    .file-row input { margin-bottom: 0; }
+    #results { margin-top: 2rem; }
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat-card { background: var(--pico-card-background-color); border: 1px solid var(--pico-card-border-color); border-radius: var(--pico-border-radius); padding: 1rem 1.25rem; text-align: center; }
+    .stat-card .number { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .stat-card .label { font-size: 0.8rem; color: var(--pico-muted-color); margin-top: 0.25rem; }
+    .added   { color: #4caf50; }
+    .removed { color: #f44336; }
+    .changed { color: #ff9800; }
+    .neutral { color: var(--pico-muted-color); }
+    table { width: 100%; font-size: 0.875rem; }
+    .tag { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+    .tag-added   { background: #1b5e20; color: #a5d6a7; }
+    .tag-removed { background: #b71c1c; color: #ef9a9a; }
+    .tag-changed { background: #e65100; color: #ffcc80; }
+    #error-box { display: none; margin-top: 1rem; }
+    #spinner { display: none; }
+    .tabs { display: flex; gap: 0; margin-bottom: 1.5rem; border-bottom: 2px solid var(--pico-card-border-color); }
+    .tab-btn { background: none; border: none; padding: 0.6rem 1.4rem; cursor: pointer; color: var(--pico-muted-color); font-size: 1rem; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+    .tab-btn.active { color: var(--pico-primary); border-bottom-color: var(--pico-primary); font-weight: 600; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .compat-badge { display: inline-block; padding: 0.2rem 0.75rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; margin-right: 0.5rem; }
+    .compat-ok  { background: #1b5e20; color: #a5d6a7; }
+    .compat-bad { background: #b71c1c; color: #ef9a9a; }
+    .impact-safe    { color: #4caf50; }
+    .impact-risky   { color: #ff9800; }
+    .impact-breaking { color: #f44336; }
+  </style>
+</head>
+<body>
+  <h1>DataDiff</h1>
+  <p class="subtitle">Compare two CSV files and inspect what changed.</p>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="data">Data Diff</button>
+    <button class="tab-btn" data-tab="schema">Schema Diff</button>
+  </nav>
+
+  <!-- ── DATA DIFF TAB ── -->
+  <div id="tab-data" class="tab-panel active">
+  <article>
+    <form id="diff-form">
+      <div class="grid">
+        <label>
+          Source CSV
+          <div class="file-row">
+            <input type="text" id="source-path" placeholder="Path to source CSV…" required />
+            <button type="button" id="browse-source" class="secondary outline">Browse</button>
+          </div>
+        </label>
+        <label>
+          Target CSV
+          <div class="file-row">
+            <input type="text" id="target-path" placeholder="Path to target CSV…" required />
+            <button type="button" id="browse-target" class="secondary outline">Browse</button>
+          </div>
+        </label>
+      </div>
+
+      <div class="grid">
+        <label>
+          Key Column(s)
+          <input type="text" id="keys" placeholder="e.g. id  or  id, order_id" required />
+        </label>
+        <label>
+          Numeric Tolerance
+          <input type="number" id="tolerance" placeholder="Optional, e.g. 0.01" step="any" min="0" />
+        </label>
+      </div>
+
+      <div class="grid">
+        <label>
+          Exclude Columns
+          <input type="text" id="exclude" placeholder="Optional comma-separated columns to skip" />
+        </label>
+        <label>
+          Only Columns
+          <input type="text" id="only" placeholder="Optional: compare only these columns" />
+        </label>
+      </div>
+
+      <button type="submit" id="run-btn">Run Diff</button>
+      <span id="spinner" aria-busy="true" style="margin-left:1rem;">Running…</span>
+    </form>
+  </article>
+
+  <div id="error-box">
+    <article style="border-color: #f44336;">
+      <strong>Error:</strong> <span id="error-msg"></span>
+    </article>
+  </div>
+
+  <div id="results" style="display:none">
+    <h2>Results</h2>
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="number added" id="stat-added">—</div>
+        <div class="label">Added rows (target only)</div>
+      </div>
+      <div class="stat-card">
+        <div class="number removed" id="stat-removed">—</div>
+        <div class="label">Removed rows (source only)</div>
+      </div>
+      <div class="stat-card">
+        <div class="number changed" id="stat-changed">—</div>
+        <div class="label">Modified rows</div>
+      </div>
+      <div class="stat-card">
+        <div class="number neutral" id="stat-src-rows">—</div>
+        <div class="label">Source rows</div>
+      </div>
+      <div class="stat-card">
+        <div class="number neutral" id="stat-tgt-rows">—</div>
+        <div class="label">Target rows</div>
+      </div>
+      <div class="stat-card">
+        <div class="number neutral" id="stat-cols-changed">—</div>
+        <div class="label">Columns with changes</div>
+      </div>
+    </div>
+
+    <section id="section-schema-changes" style="display:none">
+      <h3>Schema Changes</h3>
+      <table>
+        <thead><tr><th>Column</th><th>Change</th></tr></thead>
+        <tbody id="schema-changes-body"></tbody>
+      </table>
+    </section>
+
+    <section id="section-col-changes" style="display:none">
+      <h3>Column Change Summary</h3>
+      <table>
+        <thead><tr><th>Column</th><th>Changed Rows</th><th>% of Modified</th></tr></thead>
+        <tbody id="col-changes-body"></tbody>
+      </table>
+    </section>
+
+    <section id="section-rows" style="display:none">
+      <h3>Row Details</h3>
+      <table>
+        <thead><tr><th>Key</th><th>Status</th></tr></thead>
+        <tbody id="rows-body"></tbody>
+      </table>
+    </section>
+
+    <details>
+      <summary>Raw JSON</summary>
+      <pre id="raw-json" style="font-size:0.75rem; overflow:auto; max-height:400px;"></pre>
+    </details>
+  </div>
+  </div> <!-- end tab-data -->
+
+  <!-- ── SCHEMA DIFF TAB ── -->
+  <div id="tab-schema" class="tab-panel">
+  <article>
+    <form id="schema-form">
+      <div class="grid">
+        <label>
+          Source CSV
+          <div class="file-row">
+            <input type="text" id="schema-source-path" placeholder="Path to source CSV…" required />
+            <button type="button" id="schema-browse-source" class="secondary outline">Browse</button>
+          </div>
+        </label>
+        <label>
+          Target CSV
+          <div class="file-row">
+            <input type="text" id="schema-target-path" placeholder="Path to target CSV…" required />
+            <button type="button" id="schema-browse-target" class="secondary outline">Browse</button>
+          </div>
+        </label>
+      </div>
+      <button type="submit" id="schema-run-btn">Run Schema Diff</button>
+      <span id="schema-spinner" style="display:none; margin-left:1rem;" aria-busy="true">Running…</span>
+    </form>
+  </article>
+
+  <div id="schema-error-box" style="display:none">
+    <article style="border-color: #f44336;">
+      <strong>Error:</strong> <span id="schema-error-msg"></span>
+    </article>
+  </div>
+
+  <div id="schema-results" style="display:none">
+    <h2>Schema Results</h2>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="number added" id="s-stat-added">—</div>
+        <div class="label">Columns added</div>
+      </div>
+      <div class="stat-card">
+        <div class="number removed" id="s-stat-removed">—</div>
+        <div class="label">Columns removed</div>
+      </div>
+      <div class="stat-card">
+        <div class="number changed" id="s-stat-types">—</div>
+        <div class="label">Type changes</div>
+      </div>
+    </div>
+
+    <p>
+      Backward compatible: <span id="s-compat-back"></span>
+      &nbsp; Forward compatible: <span id="s-compat-fwd"></span>
+    </p>
+
+    <section id="s-section-added" style="display:none">
+      <h3>Added Columns</h3>
+      <table><thead><tr><th>Column</th></tr></thead>
+        <tbody id="s-added-body"></tbody>
+      </table>
+    </section>
+
+    <section id="s-section-removed" style="display:none">
+      <h3>Removed Columns</h3>
+      <table><thead><tr><th>Column</th></tr></thead>
+        <tbody id="s-removed-body"></tbody>
+      </table>
+    </section>
+
+    <section id="s-section-types" style="display:none">
+      <h3>Type Changes</h3>
+      <table>
+        <thead><tr><th>Column</th><th>Source Type</th><th>Target Type</th><th>Impact</th></tr></thead>
+        <tbody id="s-types-body"></tbody>
+      </table>
+    </section>
+
+    <section id="s-section-renames" style="display:none">
+      <h3>Possible Renames</h3>
+      <table>
+        <thead><tr><th>Source Column</th><th>Target Column</th><th>Confidence</th></tr></thead>
+        <tbody id="s-renames-body"></tbody>
+      </table>
+    </section>
+
+    <section id="s-section-violations" style="display:none">
+      <h3 style="color:#f44336">Policy Violations</h3>
+      <ul id="s-violations-list"></ul>
+    </section>
+
+    <section id="s-section-breaking" style="display:none">
+      <h3>Breaking / Risky Reasons</h3>
+      <ul id="s-breaking-list"></ul>
+    </section>
+
+    <details>
+      <summary>Raw JSON</summary>
+      <pre id="s-raw-json" style="font-size:0.75rem; overflow:auto; max-height:400px;"></pre>
+    </details>
+  </div>
+  </div> <!-- end tab-schema -->
+
+  <script>
+    function getTauri() {
+      if (!window.__TAURI__) {
+        alert('Tauri API not available. Make sure withGlobalTauri is enabled in tauri.conf.json.');
+        throw new Error('window.__TAURI__ is undefined');
+      }
+      return window.__TAURI__;
+    }
+
+    async function pickFile(inputId) {
+      try {
+        const { open } = getTauri().dialog;
+        const path = await open({ multiple: false, filters: [{ name: 'CSV', extensions: ['csv'] }] });
+        if (path) document.getElementById(inputId).value = path;
+      } catch (err) {
+        console.error('Browse error:', err);
+      }
+    }
+
+    document.getElementById('browse-source').addEventListener('click', () => pickFile('source-path'));
+    document.getElementById('browse-target').addEventListener('click', () => pickFile('target-path'));
+
+    function showError(msg) {
+      document.getElementById('error-msg').textContent = msg;
+      document.getElementById('error-box').style.display = '';
+      document.getElementById('results').style.display = 'none';
+    }
+
+    function hideError() {
+      document.getElementById('error-box').style.display = 'none';
+    }
+
+    function setText(id, val) { document.getElementById(id).textContent = val; }
+
+    function renderResults(data) {
+      // Stats
+      const rs = data.row_summary;
+      setText('stat-added',   rs.target_only_rows);
+      setText('stat-removed', rs.source_only_rows);
+      setText('stat-changed', rs.modified_rows);
+      setText('stat-src-rows', rs.source_rows);
+      setText('stat-tgt-rows', rs.target_rows);
+
+      const activeCols = (data.change_summary || []).filter(c => c.changed_rows > 0).length;
+      setText('stat-cols-changed', activeCols);
+
+      // Schema changes
+      const added   = data.column_summary?.column_presence?.added_in_target   || [];
+      const removed = data.column_summary?.column_presence?.removed_from_source || [];
+      const schemaBody = document.getElementById('schema-changes-body');
+      schemaBody.innerHTML = '';
+      if (added.length || removed.length) {
+        added.forEach(col => {
+          schemaBody.innerHTML += `<tr><td>${col}</td><td><span class="tag tag-added">added</span></td></tr>`;
+        });
+        removed.forEach(col => {
+          schemaBody.innerHTML += `<tr><td>${col}</td><td><span class="tag tag-removed">removed</span></td></tr>`;
+        });
+        document.getElementById('section-schema-changes').style.display = '';
+      } else {
+        document.getElementById('section-schema-changes').style.display = 'none';
+      }
+
+      // Column change summary
+      const summary = (data.change_summary || []).filter(c => c.changed_rows > 0);
+      const colBody = document.getElementById('col-changes-body');
+      colBody.innerHTML = '';
+      if (summary.length) {
+        summary.sort((a, b) => b.changed_rows - a.changed_rows).forEach(c => {
+          colBody.innerHTML += `<tr><td>${c.column}</td><td>${c.changed_rows}</td><td>${c.percent_of_changed_rows.toFixed(1)}%</td></tr>`;
+        });
+        document.getElementById('section-col-changes').style.display = '';
+      } else {
+        document.getElementById('section-col-changes').style.display = 'none';
+      }
+
+      // Row details
+      const rowsBody = document.getElementById('rows-body');
+      rowsBody.innerHTML = '';
+      const allRows = [
+        ...(data.source_only || []).map(k => ({ key: k, status: 'removed' })),
+        ...(data.target_only || []).map(k => ({ key: k, status: 'added' })),
+        ...(data.modified    || []).map(k => ({ key: k, status: 'changed' })),
+      ];
+      if (allRows.length) {
+        allRows.forEach(r => {
+          rowsBody.innerHTML += `<tr><td>${r.key}</td><td><span class="tag tag-${r.status}">${r.status}</span></td></tr>`;
+        });
+        document.getElementById('section-rows').style.display = '';
+      } else {
+        document.getElementById('section-rows').style.display = 'none';
+      }
+
+      document.getElementById('raw-json').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('results').style.display = '';
+    }
+
+    document.getElementById('diff-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideError();
+      document.getElementById('spinner').style.display = 'inline';
+      document.getElementById('run-btn').setAttribute('aria-busy', 'true');
+
+      const path1 = document.getElementById('source-path').value.trim();
+      const path2 = document.getElementById('target-path').value.trim();
+      const rawKeys = document.getElementById('keys').value.trim();
+      const keys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
+      const toleranceVal = document.getElementById('tolerance').value.trim();
+      const excludeVal  = document.getElementById('exclude').value.trim() || null;
+      const onlyVal     = document.getElementById('only').value.trim() || null;
+
+      try {
+        const { invoke } = getTauri().core;
+        const result = await invoke('run_diff', {
+          path1,
+          path2,
+          keys,
+          excludeColumns: excludeVal,
+          onlyColumns: onlyVal,
+          numericTolerance: toleranceVal ? parseFloat(toleranceVal) : null,
+        });
+        renderResults(result);
+      } catch (err) {
+        showError(err);
+      } finally {
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('run-btn').removeAttribute('aria-busy');
+      }
+    });
+
+    // ── TAB SWITCHING ──
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    // ── SCHEMA DIFF ──
+    document.getElementById('schema-browse-source').addEventListener('click', () => pickFile('schema-source-path'));
+    document.getElementById('schema-browse-target').addEventListener('click', () => pickFile('schema-target-path'));
+
+    function compatBadge(ok) {
+      return `<span class="compat-badge ${ok ? 'compat-ok' : 'compat-bad'}">${ok ? 'Yes' : 'No'}</span>`;
+    }
+
+    function impactClass(impact) {
+      if (impact === 'SafePromotion') return 'impact-safe';
+      if (impact === 'RiskyConversion') return 'impact-risky';
+      return 'impact-breaking';
+    }
+
+    function renderSchemaResults(data) {
+      document.getElementById('s-stat-added').textContent   = data.added.length;
+      document.getElementById('s-stat-removed').textContent = data.removed.length;
+      document.getElementById('s-stat-types').textContent   = data.type_changes.length;
+      document.getElementById('s-compat-back').innerHTML = compatBadge(data.compatibility.backward_compatible);
+      document.getElementById('s-compat-fwd').innerHTML  = compatBadge(data.compatibility.forward_compatible);
+
+      const addedBody = document.getElementById('s-added-body');
+      addedBody.innerHTML = data.added.map(c => `<tr><td>${c}</td></tr>`).join('');
+      document.getElementById('s-section-added').style.display = data.added.length ? '' : 'none';
+
+      const removedBody = document.getElementById('s-removed-body');
+      removedBody.innerHTML = data.removed.map(c => `<tr><td>${c}</td></tr>`).join('');
+      document.getElementById('s-section-removed').style.display = data.removed.length ? '' : 'none';
+
+      const typesBody = document.getElementById('s-types-body');
+      typesBody.innerHTML = data.type_changes.map(t =>
+        `<tr><td>${t.column}</td><td>${t.source_type}</td><td>${t.target_type}</td>
+         <td class="${impactClass(t.impact)}">${t.impact}</td></tr>`
+      ).join('');
+      document.getElementById('s-section-types').style.display = data.type_changes.length ? '' : 'none';
+
+      const renamesBody = document.getElementById('s-renames-body');
+      renamesBody.innerHTML = data.rename_suggestions.map(r =>
+        `<tr><td>${r.source_column}</td><td>${r.target_column}</td><td>${(r.score * 100).toFixed(0)}%</td></tr>`
+      ).join('');
+      document.getElementById('s-section-renames').style.display = data.rename_suggestions.length ? '' : 'none';
+
+      const breakingList = document.getElementById('s-breaking-list');
+      breakingList.innerHTML = data.compatibility.breaking_reasons.map(r => `<li>${r}</li>`).join('');
+      document.getElementById('s-section-breaking').style.display = data.compatibility.breaking_reasons.length ? '' : 'none';
+
+      const violationsList = document.getElementById('s-violations-list');
+      violationsList.innerHTML = data.policy_violations.map(v => `<li>${v}</li>`).join('');
+      document.getElementById('s-section-violations').style.display = data.policy_violations.length ? '' : 'none';
+
+      document.getElementById('s-raw-json').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('schema-results').style.display = '';
+    }
+
+    document.getElementById('schema-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      document.getElementById('schema-error-box').style.display = 'none';
+      document.getElementById('schema-spinner').style.display = 'inline';
+      document.getElementById('schema-run-btn').setAttribute('aria-busy', 'true');
+
+      const path1 = document.getElementById('schema-source-path').value.trim();
+      const path2 = document.getElementById('schema-target-path').value.trim();
+
+      try {
+        const { invoke } = getTauri().core;
+        const result = await invoke('run_schema_diff', { path1, path2 });
+        renderSchemaResults(result);
+      } catch (err) {
+        document.getElementById('schema-error-msg').textContent = err;
+        document.getElementById('schema-error-box').style.display = '';
+        document.getElementById('schema-results').style.display = 'none';
+      } finally {
+        document.getElementById('schema-spinner').style.display = 'none';
+        document.getElementById('schema-run-btn').removeAttribute('aria-busy');
+      }
+    });
+  </script>
+</body>
+</html>

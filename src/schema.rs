@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Result};
 use polars::prelude::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 enum TypeChangeImpact {
     SafePromotion,
     RiskyConversion,
@@ -54,26 +54,39 @@ impl From<anyhow::Error> for SchemaDiffError {
     }
 }
 
-#[derive(Debug, Clone)]
-struct TypeChange {
+#[derive(Debug, Clone, Serialize)]
+pub struct TypeChange {
     column: String,
     source_type: String,
     target_type: String,
     impact: TypeChangeImpact,
 }
 
-#[derive(Debug, Clone)]
-struct RenameSuggestion {
+#[derive(Debug, Clone, Serialize)]
+pub struct RenameSuggestion {
     source_column: String,
     target_column: String,
     score: f64,
 }
 
-#[derive(Debug, Clone)]
-struct CompatibilitySummary {
+#[derive(Debug, Clone, Serialize)]
+pub struct CompatibilitySummary {
     backward_compatible: bool,
     forward_compatible: bool,
     breaking_reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SchemaDiffResult {
+    pub source_path: String,
+    pub target_path: String,
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+    pub type_changes: Vec<TypeChange>,
+    pub rename_suggestions: Vec<RenameSuggestion>,
+    pub compatibility: CompatibilitySummary,
+    pub policy_violations: Vec<String>,
+    pub policy_passed: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -90,6 +103,69 @@ struct SchemaPolicy {
 struct AllowedTypeChange {
     from: String,
     to: String,
+}
+
+/// Returns structured schema diff data — no terminal output. Used by the GUI and `--json` mode.
+pub fn run_schema_diff(path1: &str, path2: &str, policy_path: Option<&str>) -> Result<SchemaDiffResult, SchemaDiffError> {
+    let df1 = CsvReader::from_path(path1)?
+        .infer_schema(Some(100))
+        .has_header(true)
+        .finish()?;
+
+    let df2 = CsvReader::from_path(path2)?
+        .infer_schema(Some(100))
+        .has_header(true)
+        .finish()?;
+
+    let source_schema = schema_map(&df1)?;
+    let target_schema = schema_map(&df2)?;
+
+    let source_cols: BTreeSet<String> = source_schema.keys().cloned().collect();
+    let target_cols: BTreeSet<String> = target_schema.keys().cloned().collect();
+
+    let added: Vec<String> = target_cols.difference(&source_cols).cloned().collect();
+    let removed: Vec<String> = source_cols.difference(&target_cols).cloned().collect();
+
+    let mut type_changes = Vec::new();
+    for col in source_cols.intersection(&target_cols) {
+        let source_ty = source_schema.get(col).ok_or_else(|| anyhow!("Missing source type for column: {col}"))?;
+        let target_ty = target_schema.get(col).ok_or_else(|| anyhow!("Missing target type for column: {col}"))?;
+        if source_ty != target_ty {
+            type_changes.push(TypeChange {
+                column: col.to_string(),
+                source_type: source_ty.clone(),
+                target_type: target_ty.clone(),
+                impact: classify_type_change(source_ty, target_ty),
+            });
+        }
+    }
+
+    let rename_suggestions = detect_rename_suggestions(&removed, &added, &source_schema, &target_schema);
+    let compatibility = summarize_compatibility(&added, &removed, &type_changes);
+
+    let (policy_violations, policy_passed) = if let Some(path) = policy_path {
+        let policy = load_policy(path)?;
+        let violations = evaluate_policy(&policy, &source_cols, &target_cols, &added, &removed, &type_changes, &compatibility);
+        let passed = violations.is_empty();
+        if !violations.is_empty() && policy.fail_on_breaking.unwrap_or(true) {
+            return Err(SchemaDiffError::PolicyViolation("Schema policy violations detected".to_string()));
+        }
+        (violations, Some(passed))
+    } else {
+        (Vec::new(), None)
+    };
+
+    Ok(SchemaDiffResult {
+        source_path: path1.to_string(),
+        target_path: path2.to_string(),
+        added,
+        removed,
+        type_changes,
+        rename_suggestions,
+        compatibility,
+        policy_violations,
+        policy_passed,
+    })
 }
 
 pub fn schema_diff(path1: &str, path2: &str, policy_path: Option<&str>) -> Result<(), SchemaDiffError> {

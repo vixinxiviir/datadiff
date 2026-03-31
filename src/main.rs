@@ -1,5 +1,5 @@
-mod schema;
-mod data;
+use datadiff::data;
+use datadiff::schema;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
