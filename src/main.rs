@@ -2,6 +2,7 @@ mod schema;
 mod data;
 
 use clap::{Parser, Subcommand};
+use colored::Colorize;
 
 #[derive(Parser)]
 #[command(name = "datadiff")]
@@ -53,6 +54,9 @@ enum Commands {
 
         #[arg(long, help = "Show only modified rows, skip summary tables")]
         diffs_only: bool,
+
+        #[arg(long, help = "Output results as JSON to stdout (suppresses all other output)")]
+        json: bool,
     },
     Batch {
         #[arg(long, help = "Path to a batch manifest describing source/target pairs (JSON or CSV)")]
@@ -88,6 +92,13 @@ enum Commands {
 }
 
 fn main() {
+    if let Err(e) = run() {
+        eprintln!("{} {}", "error:".red().bold(), e);
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
@@ -96,7 +107,7 @@ fn main() {
             target,
             policy,
         } => {
-            schema::schema_diff(&source, &target, policy.as_deref()).unwrap();
+            schema::schema_diff(&source, &target, policy.as_deref())?;
         }
         Commands::Data {
             source,
@@ -109,8 +120,9 @@ fn main() {
             only_columns,
             numeric_tolerance,
             diffs_only,
+            json,
         } => {
-            data::validate_export_args(output.as_deref(), format.as_ref(), temp).unwrap();
+            data::validate_export_args(output.as_deref(), format.as_ref(), temp)?;
             data::data_diff(
                 &source,
                 &target,
@@ -122,8 +134,8 @@ fn main() {
                 only_columns.as_deref(),
                 numeric_tolerance,
                 diffs_only,
-            )
-            .unwrap();
+                json,
+            )?;
         }
         Commands::Batch {
             manifest,
@@ -137,7 +149,7 @@ fn main() {
             diffs_only,
             fail_fast,
         } => {
-            data::validate_export_args(output.as_deref(), format.as_ref(), false).unwrap();
+            data::validate_export_args(output.as_deref(), format.as_ref(), false)?;
             data::batch_diff(
                 &manifest,
                 manifest_format,
@@ -149,8 +161,9 @@ fn main() {
                 numeric_tolerance,
                 diffs_only,
                 fail_fast,
-            )
-            .unwrap();
+            )?;
         }
     }
+
+    Ok(())
 }

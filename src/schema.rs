@@ -11,6 +11,49 @@ enum TypeChangeImpact {
     Breaking,
 }
 
+#[derive(Clone, Debug)]
+pub enum SchemaDiffError {
+    MissingColumnType(String),
+    PolicyViolation(String),
+    InvalidPolicyFile(String),
+}
+
+impl std::fmt::Display for SchemaDiffError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SchemaDiffError::MissingColumnType(col) => {
+                write!(f, "Missing column type for: {}", col)
+            }
+            SchemaDiffError::PolicyViolation(msg) => {
+                write!(f, "Schema policy violation: {}", msg)
+            }
+            SchemaDiffError::InvalidPolicyFile(msg) => {
+                write!(f, "Invalid schema policy file: {}", msg)
+            }
+        }
+    }
+}
+
+impl std::error::Error for SchemaDiffError {}
+
+impl From<serde_json::Error> for SchemaDiffError {
+    fn from(err: serde_json::Error) -> Self {
+        SchemaDiffError::InvalidPolicyFile(err.to_string())
+    }
+}
+
+impl From<PolarsError> for SchemaDiffError {
+    fn from(err: PolarsError) -> Self {
+        SchemaDiffError::MissingColumnType(err.to_string())
+    }
+}
+
+impl From<anyhow::Error> for SchemaDiffError {
+    fn from(err: anyhow::Error) -> Self {
+        SchemaDiffError::MissingColumnType(err.to_string())
+    }
+}
+
 #[derive(Debug, Clone)]
 struct TypeChange {
     column: String,
@@ -49,7 +92,7 @@ struct AllowedTypeChange {
     to: String,
 }
 
-pub fn schema_diff(path1: &str, path2: &str, policy_path: Option<&str>) -> Result<()> {
+pub fn schema_diff(path1: &str, path2: &str, policy_path: Option<&str>) -> Result<(), SchemaDiffError> {
     let df1 = CsvReader::from_path(path1)?
         .infer_schema(Some(100))
         .has_header(true)
@@ -165,7 +208,7 @@ pub fn schema_diff(path1: &str, path2: &str, policy_path: Option<&str>) -> Resul
             }
 
             if policy.fail_on_breaking.unwrap_or(true) {
-                return Err(anyhow!("Schema policy violations detected"));
+                return Err(SchemaDiffError::PolicyViolation("Schema policy violations detected".to_string()));
             }
         }
     }

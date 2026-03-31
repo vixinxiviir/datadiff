@@ -78,6 +78,27 @@ impl From<anyhow::Error> for DataDiffError {
     }
 }
 
+#[derive(Debug)]
+struct ColumnFilterSet {
+    exclude: HashSet<String>,
+    only: HashSet<String>,
+}
+
+impl ColumnFilterSet {
+    fn new(exclude: Option<&str>, only: Option<&str>) -> Self {
+    ColumnFilterSet {
+        exclude: parse_column_list(exclude),
+        only: parse_column_list(only),
+    }
+}
+
+    fn should_include(&self, col_name: &str, keys: &[String]) -> bool {
+    if keys.contains(&col_name.to_string()) { return false; }
+    if !self.only.is_empty() { return self.only.contains(col_name); }
+    if !self.exclude.is_empty() { return !self.exclude.contains(col_name); }
+    true
+}
+}
 #[derive(Clone, Debug, Serialize)]
 struct RowSummary {
     source_rows: usize,
@@ -258,6 +279,7 @@ fn parse_column_list(columns: Option<&str>) -> HashSet<String> {
     }
 }
 
+
 fn parse_manifest_keys(raw_keys: &str) -> Result<Vec<String>, DataDiffError> {
     let parsed: Vec<String> = raw_keys
         .split(',')
@@ -293,26 +315,7 @@ fn anyvalue_to_f64(value: &polars::prelude::AnyValue<'_>) -> Option<f64> {
     }
 }
 
-/// Check if a column should be compared based on filters
-fn should_include_column(col_name: &str, exclude_set: &HashSet<String>, only_set: &HashSet<String>, keys: &[String]) -> bool {
-    // Keys are always excluded from comparison (they're used for matching)
-    if keys.contains(&col_name.to_string()) {
-        return false;
-    }
 
-    // If only_columns is specified, column must be in that set
-    if !only_set.is_empty() {
-        return only_set.contains(col_name);
-    }
-
-    // If exclude_columns is specified, column must NOT be in that set
-    if !exclude_set.is_empty() {
-        return !exclude_set.contains(col_name);
-    }
-
-    // By default, include the column
-    true
-}
 
 /// Compare two values with optional numeric tolerance
 fn values_equal(left: &polars::prelude::AnyValue, right: &polars::prelude::AnyValue, tolerance: Option<f64>) -> bool {
@@ -336,6 +339,7 @@ pub fn data_diff(
     only_columns: Option<&str>,
     numeric_tolerance: Option<f64>,
     diffs_only: bool,
+    json_output: bool,
 ) -> Result<()> {
     let options = DiffComputationOptions {
         exclude_columns,
@@ -345,6 +349,11 @@ pub fn data_diff(
     };
 
     let export_payload = compute_diff_export(path1, path2, keys, &options)?;
+
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(&export_payload)?);
+        return Ok(());
+    }
 
     render_diff_report(path1, path2, keys, &export_payload, diffs_only);
 
@@ -501,15 +510,13 @@ fn compute_diff_export(
     keys: &[String],
     options: &DiffComputationOptions<'_>,
 ) -> Result<DiffExport, DataDiffError> {
-    // Parse column filters
-    let exclude_set = parse_column_list(options.exclude_columns);
-    let only_set = parse_column_list(options.only_columns);
-
-    if !exclude_set.is_empty() && !only_set.is_empty() {
+    // Build filter set — single allocation, validated once
+    if options.exclude_columns.is_some() && options.only_columns.is_some() {
         return Err(DataDiffError::CLICommandError(
             "Cannot use both --exclude-columns and --only-columns".to_string(),
         ));
     }
+    let filters = ColumnFilterSet::new(options.exclude_columns, options.only_columns);
 
     let df1 = CsvReader::from_path(path1)?
         .infer_schema(Some(100))
@@ -563,13 +570,9 @@ fn compute_diff_export(
     // Restrict row comparisons to the shared non-key columns so schema changes
     // remain the responsibility of schema_diff while data_diff focuses on row changes.
     // Also apply user's column filters (exclude/only).
-    let key_set: HashSet<&str> = keys.iter().map(|k| k.as_str()).collect();
     let mut comparable_columns: Vec<String> = cols1
         .intersection(&cols2)
-        .filter(|name| {
-            !key_set.contains(name.as_str()) &&
-            should_include_column(name, &exclude_set, &only_set, keys)
-        })
+        .filter(|name| filters.should_include(name, keys))
         .cloned()
         .collect();
     comparable_columns.sort();
