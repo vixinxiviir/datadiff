@@ -53,22 +53,72 @@
   <div id="tab-data" class="tab-panel active">
   <article>
     <form id="diff-form">
-      <div class="grid">
-        <label>
-          Source CSV
-          <div class="file-row">
-            <input type="text" id="source-path" placeholder="Path to source CSV…" required />
-            <button type="button" id="browse-source" class="secondary outline">Browse</button>
-          </div>
+
+      <!-- ── SOURCE SIDE ── -->
+      <fieldset>
+        <legend>Source</legend>
+        <label>Source type
+          <select id="source-type" onchange="onSourceTypeChange('source')">
+            <option value="file">CSV File</option>
+            <option value="sqlserver">SQL Server</option>
+          </select>
         </label>
-        <label>
-          Target CSV
-          <div class="file-row">
-            <input type="text" id="target-path" placeholder="Path to target CSV…" required />
-            <button type="button" id="browse-target" class="secondary outline">Browse</button>
+        <div id="source-file-section">
+          <label>
+            File path
+            <div class="file-row">
+              <input type="text" id="source-path" placeholder="Path to source CSV…" />
+              <button type="button" id="browse-source" class="secondary outline">Browse</button>
+            </div>
+          </label>
+        </div>
+        <div id="source-db-section" style="display:none">
+          <div class="grid">
+            <label>Host <input type="text" id="source-host" placeholder="localhost" /></label>
+            <label>Port <input type="number" id="source-port" placeholder="1433" value="1433" /></label>
           </div>
+          <label>Database <input type="text" id="source-database" /></label>
+          <label>Table or Query <input type="text" id="source-query" placeholder="dbo.customers  or  SELECT * FROM …" /></label>
+          <div class="grid">
+            <label>Username <input type="text" id="source-username" autocomplete="username" /></label>
+            <label>Password <input type="password" id="source-password" autocomplete="current-password" /></label>
+          </div>
+          <small style="color:var(--pico-muted-color)">⚠ Credentials are held in memory only and never stored to disk.</small>
+        </div>
+      </fieldset>
+
+      <!-- ── TARGET SIDE ── -->
+      <fieldset>
+        <legend>Target</legend>
+        <label>Source type
+          <select id="target-type" onchange="onSourceTypeChange('target')">
+            <option value="file">CSV File</option>
+            <option value="sqlserver">SQL Server</option>
+          </select>
         </label>
-      </div>
+        <div id="target-file-section">
+          <label>
+            File path
+            <div class="file-row">
+              <input type="text" id="target-path" placeholder="Path to target CSV…" />
+              <button type="button" id="browse-target" class="secondary outline">Browse</button>
+            </div>
+          </label>
+        </div>
+        <div id="target-db-section" style="display:none">
+          <div class="grid">
+            <label>Host <input type="text" id="target-host" placeholder="localhost" /></label>
+            <label>Port <input type="number" id="target-port" placeholder="1433" value="1433" /></label>
+          </div>
+          <label>Database <input type="text" id="target-database" /></label>
+          <label>Table or Query <input type="text" id="target-query" placeholder="dbo.customers  or  SELECT * FROM …" /></label>
+          <div class="grid">
+            <label>Username <input type="text" id="target-username" autocomplete="username" /></label>
+            <label>Password <input type="password" id="target-password" autocomplete="current-password" /></label>
+          </div>
+          <small style="color:var(--pico-muted-color)">⚠ Credentials are held in memory only and never stored to disk.</small>
+        </div>
+      </fieldset>
 
       <div class="grid">
         <label>
@@ -286,6 +336,41 @@
     document.getElementById('browse-source').addEventListener('click', () => pickFile('source-path'));
     document.getElementById('browse-target').addEventListener('click', () => pickFile('target-path'));
 
+    function onSourceTypeChange(side) {
+      const type = document.getElementById(side + '-type').value;
+      const isFile = type === 'file';
+      document.getElementById(side + '-file-section').style.display = isFile ? '' : 'none';
+      document.getElementById(side + '-db-section').style.display   = isFile ? 'none' : '';
+    }
+
+    function buildSourceConfig(side) {
+      const type = document.getElementById(side + '-type').value;
+      if (type === 'file') {
+        const path = document.getElementById(side + '-path').value.trim();
+        if (!path) throw new Error(`${side} file path is required`);
+        return { type: 'file', path };
+      }
+      // SQL Server
+      const host     = document.getElementById(side + '-host').value.trim();
+      const portRaw  = document.getElementById(side + '-port').value.trim();
+      const database = document.getElementById(side + '-database').value.trim();
+      const query    = document.getElementById(side + '-query').value.trim();
+      const username = document.getElementById(side + '-username').value.trim();
+      const password = document.getElementById(side + '-password').value;
+      if (!host || !database || !query || !username) {
+        throw new Error(`${side} SQL Server connection: host, database, table/query, and username are required`);
+      }
+      return {
+        type: 'sql_server',
+        host,
+        port: portRaw ? parseInt(portRaw, 10) : null,
+        database,
+        query,
+        username,
+        password,
+      };
+    }
+
     function showError(msg) {
       document.getElementById('error-msg').textContent = msg;
       document.getElementById('error-box').style.display = '';
@@ -367,19 +452,20 @@
       document.getElementById('spinner').style.display = 'inline';
       document.getElementById('run-btn').setAttribute('aria-busy', 'true');
 
-      const path1 = document.getElementById('source-path').value.trim();
-      const path2 = document.getElementById('target-path').value.trim();
-      const rawKeys = document.getElementById('keys').value.trim();
-      const keys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
-      const toleranceVal = document.getElementById('tolerance').value.trim();
-      const excludeVal  = document.getElementById('exclude').value.trim() || null;
-      const onlyVal     = document.getElementById('only').value.trim() || null;
-
       try {
+        const source1 = buildSourceConfig('source');
+        const source2 = buildSourceConfig('target');
+        const rawKeys = document.getElementById('keys').value.trim();
+        const keys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
+        if (!keys.length) throw new Error('At least one key column is required');
+        const toleranceVal = document.getElementById('tolerance').value.trim();
+        const excludeVal  = document.getElementById('exclude').value.trim() || null;
+        const onlyVal     = document.getElementById('only').value.trim() || null;
+
         const { invoke } = getTauri().core;
-        const result = await invoke('run_diff', {
-          path1,
-          path2,
+        const result = await invoke('run_source_diff', {
+          source1,
+          source2,
           keys,
           excludeColumns: excludeVal,
           onlyColumns: onlyVal,

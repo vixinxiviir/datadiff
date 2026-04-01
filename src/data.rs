@@ -510,14 +510,6 @@ fn compute_diff_export(
     keys: &[String],
     options: &DiffComputationOptions<'_>,
 ) -> Result<DiffExport, DataDiffError> {
-    // Build filter set — single allocation, validated once
-    if options.exclude_columns.is_some() && options.only_columns.is_some() {
-        return Err(DataDiffError::CLICommandError(
-            "Cannot use both --exclude-columns and --only-columns".to_string(),
-        ));
-    }
-    let filters = ColumnFilterSet::new(options.exclude_columns, options.only_columns);
-
     let df1 = CsvReader::from_path(path1)?
         .infer_schema(Some(100))
         .has_header(true)
@@ -528,13 +520,34 @@ fn compute_diff_export(
         .has_header(true)
         .finish()?;
 
+    diff_dataframes(df1, df2, path1, path2, keys, options)
+}
+
+/// Core diff logic that operates on already-loaded DataFrames.
+/// `source_label` and `target_label` are used in error messages only.
+fn diff_dataframes(
+    df1: DataFrame,
+    df2: DataFrame,
+    source_label: &str,
+    target_label: &str,
+    keys: &[String],
+    options: &DiffComputationOptions<'_>,
+) -> Result<DiffExport, DataDiffError> {
+    // Build filter set — single allocation, validated once
+    if options.exclude_columns.is_some() && options.only_columns.is_some() {
+        return Err(DataDiffError::CLICommandError(
+            "Cannot use both --exclude-columns and --only-columns".to_string(),
+        ));
+    }
+    let filters = ColumnFilterSet::new(options.exclude_columns, options.only_columns);
+
     // Validate that all key columns exist in both dataframes
     for key in keys {
         if !df1.get_column_names().contains(&key.as_str()) {
-            return Err(DataDiffError::MissingKeyColumn(format!("Key column '{}' not found in source file: {}", key, path1)));
+            return Err(DataDiffError::MissingKeyColumn(format!("Key column '{}' not found in source: {}", key, source_label)));
         }
         if !df2.get_column_names().contains(&key.as_str()) {
-            return Err(DataDiffError::MissingKeyColumn(format!("Key column '{}' not found in target file: {}", key, path2)));
+            return Err(DataDiffError::MissingKeyColumn(format!("Key column '{}' not found in target: {}", key, target_label)));
         }
     }
 
@@ -1354,6 +1367,28 @@ pub fn run_diff(
         include_column_stats: true,
     };
     let payload = compute_diff_export(path1, path2, keys, &options)?;
+    serde_json::to_value(&payload).map_err(|e| DataDiffError::CLICommandError(e.to_string()))
+}
+
+/// Same as `run_diff` but accepts pre-loaded DataFrames (e.g. from database connectors).
+/// `source_label` and `target_label` are used in error messages only.
+pub fn run_diff_frames(
+    df1: polars::prelude::DataFrame,
+    df2: polars::prelude::DataFrame,
+    source_label: &str,
+    target_label: &str,
+    keys: &[String],
+    exclude_columns: Option<&str>,
+    only_columns: Option<&str>,
+    numeric_tolerance: Option<f64>,
+) -> Result<serde_json::Value, DataDiffError> {
+    let options = DiffComputationOptions {
+        exclude_columns,
+        only_columns,
+        numeric_tolerance,
+        include_column_stats: true,
+    };
+    let payload = diff_dataframes(df1, df2, source_label, target_label, keys, &options)?;
     serde_json::to_value(&payload).map_err(|e| DataDiffError::CLICommandError(e.to_string()))
 }
 
