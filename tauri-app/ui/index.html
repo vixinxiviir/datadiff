@@ -1,48 +1,279 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>DataDiff</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
   <style>
-    body { max-width: 960px; margin: 0 auto; padding: 1rem 2rem; }
-    h1 { margin-bottom: 0.25rem; }
-    .subtitle { color: var(--pico-muted-color); margin-bottom: 2rem; }
-    .file-row { display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end; }
-    .file-row input { margin-bottom: 0; }
-    #results { margin-top: 2rem; }
-    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
-    .stat-card { background: var(--pico-card-background-color); border: 1px solid var(--pico-card-border-color); border-radius: var(--pico-border-radius); padding: 1rem 1.25rem; text-align: center; }
-    .stat-card .number { font-size: 2rem; font-weight: 700; line-height: 1; }
-    .stat-card .label { font-size: 0.8rem; color: var(--pico-muted-color); margin-top: 0.25rem; }
-    .added   { color: #4caf50; }
-    .removed { color: #f44336; }
-    .changed { color: #ff9800; }
-    .neutral { color: var(--pico-muted-color); }
-    table { width: 100%; font-size: 0.875rem; }
-    .tag { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
-    .tag-added   { background: #1b5e20; color: #a5d6a7; }
-    .tag-removed { background: #b71c1c; color: #ef9a9a; }
-    .tag-changed { background: #e65100; color: #ffcc80; }
-    #error-box { display: none; margin-top: 1rem; }
-    #spinner { display: none; }
-    .tabs { display: flex; gap: 0; margin-bottom: 1.5rem; border-bottom: 2px solid var(--pico-card-border-color); }
-    .tab-btn { background: none; border: none; padding: 0.6rem 1.4rem; cursor: pointer; color: var(--pico-muted-color); font-size: 1rem; border-bottom: 3px solid transparent; margin-bottom: -2px; }
-    .tab-btn.active { color: var(--pico-primary); border-bottom-color: var(--pico-primary); font-weight: 600; }
+    /* ── Gruvbox Dark palette ── */
+    :root {
+      --bg:      #282828;
+      --bg1:     #3c3836;
+      --bg2:     #504945;
+      --bg3:     #665c54;
+      --bg4:     #7c6f64;
+      --fg:      #ebdbb2;
+      --fg2:     #d5c4a1;
+      --fg4:     #a89984;
+      --red:     #fb4934;
+      --green:   #b8bb26;
+      --yellow:  #fabd2f;
+      --blue:    #83a598;
+      --purple:  #d3869b;
+      --aqua:    #8ec07c;
+      --orange:  #fe8019;
+      --red-dim:    #3d1b1b;
+      --green-dim:  #2a2d1b;
+      --yellow-dim: #3b3018;
+      --radius: 4px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.5;
+      margin: 0;
+      padding: 1.5rem 2rem;
+      max-width: 980px;
+      margin-inline: auto;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--yellow);
+      margin: 0 0 0.1rem;
+      letter-spacing: 0.03em;
+    }
+    h2 { font-size: 1.2rem; color: var(--orange); margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--bg2); padding-bottom: 0.3rem; }
+    h3 { font-size: 1rem; color: var(--aqua); margin: 1.25rem 0 0.5rem; }
+    .subtitle { color: var(--fg4); margin: 0 0 1.75rem; font-size: 0.9rem; }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid var(--bg2);
+      margin-bottom: 1.5rem;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      padding: 0.55rem 1.5rem;
+      cursor: pointer;
+      color: var(--fg4);
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover { color: var(--fg2); }
+    .tab-btn.active { color: var(--yellow); border-bottom-color: var(--yellow); font-weight: 700; }
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
-    .compat-badge { display: inline-block; padding: 0.2rem 0.75rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; margin-right: 0.5rem; }
-    .compat-ok  { background: #1b5e20; color: #a5d6a7; }
-    .compat-bad { background: #b71c1c; color: #ef9a9a; }
-    .impact-safe    { color: #4caf50; }
-    .impact-risky   { color: #ff9800; }
-    .impact-breaking { color: #f44336; }
+
+    /* ── Card / article ── */
+    article {
+      background: var(--bg1);
+      border: 1px solid var(--bg2);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    /* ── Form elements ── */
+    fieldset {
+      border: 1px solid var(--bg2);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem 1rem;
+      margin-bottom: 1rem;
+    }
+    legend {
+      color: var(--blue);
+      font-weight: 600;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      padding: 0 0.4rem;
+    }
+    label {
+      display: block;
+      color: var(--fg2);
+      font-size: 0.85rem;
+      margin-bottom: 0.75rem;
+    }
+    label > span, label > select, label > input { display: block; margin-top: 0.25rem; }
+    input[type=text], input[type=number], input[type=password], select, textarea {
+      width: 100%;
+      background: var(--bg);
+      color: var(--fg);
+      border: 1px solid var(--bg3);
+      border-radius: var(--radius);
+      padding: 0.45rem 0.65rem;
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus { border-color: var(--blue); }
+    select option { background: var(--bg1); }
+    small { color: var(--fg4); font-size: 0.78rem; }
+
+    /* ── Grid helpers ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+    .file-row { display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end; }
+    .file-row input { margin-bottom: 0; }
+
+    /* ── Buttons ── */
+    button[type=submit], button.primary {
+      background: var(--yellow);
+      color: var(--bg);
+      border: none;
+      border-radius: var(--radius);
+      padding: 0.5rem 1.5rem;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-top: 0.5rem;
+    }
+    button[type=submit]:hover, button.primary:hover { background: var(--orange); }
+    button.secondary {
+      background: var(--bg2);
+      color: var(--fg2);
+      border: 1px solid var(--bg3);
+      border-radius: var(--radius);
+      padding: 0.45rem 0.9rem;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    button.secondary:hover { background: var(--bg3); color: var(--fg); }
+
+    /* ── Spinner ── */
+    #spinner, #schema-spinner { display: none; color: var(--fg4); font-size: 0.85rem; margin-left: 0.75rem; }
+
+    /* ── Error box ── */
+    #error-box, #schema-error-box { display: none; margin: 0.75rem 0; }
+    .error-card {
+      background: var(--red-dim);
+      border: 1px solid var(--red);
+      border-radius: var(--radius);
+      padding: 0.65rem 1rem;
+      color: var(--red);
+      font-size: 0.9rem;
+    }
+
+    /* ── Stat cards ── */
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 1.25rem; }
+    .stat-card {
+      background: var(--bg1);
+      border: 1px solid var(--bg2);
+      border-radius: var(--radius);
+      padding: 0.85rem 1rem;
+      text-align: center;
+    }
+    .stat-card .number { font-size: 1.9rem; font-weight: 700; line-height: 1; }
+    .stat-card .label { font-size: 0.75rem; color: var(--fg4); margin-top: 0.2rem; }
+
+    /* ── Colour helpers ── */
+    .added   { color: var(--green); }
+    .removed { color: var(--red); }
+    .changed { color: var(--yellow); }
+    .neutral { color: var(--fg4); }
+
+    /* ── Tags ── */
+    .tag { display: inline-block; padding: 0.1rem 0.55rem; border-radius: 9999px; font-size: 0.72rem; font-weight: 700; }
+    .tag-added   { background: var(--green-dim); color: var(--green); }
+    .tag-removed { background: var(--red-dim);   color: var(--red); }
+    .tag-changed { background: var(--yellow-dim); color: var(--yellow); }
+
+    /* ── Tables ── */
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    thead tr { border-bottom: 2px solid var(--bg2); }
+    th { color: var(--fg4); font-weight: 600; text-align: left; padding: 0.4rem 0.6rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    td { padding: 0.38rem 0.6rem; border-bottom: 1px solid var(--bg1); color: var(--fg2); }
+    tbody tr:hover { background: var(--bg1); }
+
+    /* ── Details / raw JSON ── */
+    details { margin-top: 1.25rem; }
+    summary { cursor: pointer; color: var(--fg4); font-size: 0.85rem; user-select: none; }
+    summary:hover { color: var(--fg2); }
+    pre {
+      background: var(--bg);
+      border: 1px solid var(--bg2);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+      font-size: 0.75rem;
+      overflow: auto;
+      max-height: 400px;
+      color: var(--fg2);
+      margin-top: 0.5rem;
+    }
+
+    /* ── Compat badges ── */
+    .compat-badge { display: inline-block; padding: 0.2rem 0.75rem; border-radius: 9999px; font-size: 0.78rem; font-weight: 700; margin-right: 0.4rem; }
+    .compat-ok  { background: var(--green-dim); color: var(--green); }
+    .compat-bad { background: var(--red-dim);   color: var(--red); }
+
+    /* ── Impact colours ── */
+    .impact-safe     { color: var(--green); }
+    .impact-risky    { color: var(--yellow); }
+    .impact-breaking { color: var(--red); }
+
+    /* ── Side-by-side source layout ── */
+    .source-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .source-pair fieldset { margin-bottom: 0; }
+
+    /* ── Shared connection panel ── */
+    #shared-conn-panel {
+      background: var(--bg);
+      border: 1px solid var(--blue);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem 1rem;
+      margin-bottom: 0.75rem;
+    }
+    #shared-conn-panel legend {
+      color: var(--blue);
+      font-weight: 600;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      padding: 0 0.3rem;
+    }
+    .shared-toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--fg4);
+    }
+    .shared-toggle-row input[type=checkbox] {
+      width: auto;
+      margin: 0;
+      accent-color: var(--blue);
+    }
+
+    #results, #schema-results { margin-top: 0.5rem; }
   </style>
 </head>
 <body>
   <h1>DataDiff</h1>
-  <p class="subtitle">Compare two CSV files and inspect what changed.</p>
+  <p class="subtitle">Compare datasets and inspect what changed.</p>
 
   <nav class="tabs">
     <button class="tab-btn active" data-tab="data">Data Diff</button>
@@ -54,96 +285,125 @@
   <article>
     <form id="diff-form">
 
-      <!-- ── SOURCE SIDE ── -->
-      <fieldset>
-        <legend>Source</legend>
-        <label>Source type
-          <select id="source-type" onchange="onSourceTypeChange('source')">
-            <option value="file">CSV File</option>
-            <option value="sqlserver">SQL Server</option>
-          </select>
-        </label>
-        <div id="source-file-section">
-          <label>
-            File path
-            <div class="file-row">
-              <input type="text" id="source-path" placeholder="Path to source CSV…" />
-              <button type="button" id="browse-source" class="secondary outline">Browse</button>
-            </div>
+      <!-- ── SHARED CONNECTION (shown when both sides are SQL Server) ── -->
+      <div id="shared-conn-panel" style="display:none">
+        <div class="shared-toggle-row">
+          <input type="checkbox" id="use-shared-conn" onchange="onSharedConnChange()" />
+          <label for="use-shared-conn" style="display:inline; margin:0; color:var(--fg2); font-size:0.88rem;">
+            Use shared connection for both sides
           </label>
         </div>
-        <div id="source-db-section" style="display:none">
-          <div class="grid">
-            <label>Host <input type="text" id="source-host" placeholder="localhost" /></label>
-            <label>Port <input type="number" id="source-port" placeholder="1433" value="1433" /></label>
+        <div id="shared-conn-fields" style="display:none">
+          <div class="grid-2">
+            <label>Host <input type="text" id="shared-host" placeholder="localhost" /></label>
+            <label>Port <input type="number" id="shared-port" placeholder="1433" value="1433" /></label>
           </div>
-          <label>Database <input type="text" id="source-database" /></label>
-          <label>Table or Query <input type="text" id="source-query" placeholder="dbo.customers  or  SELECT * FROM …" /></label>
-          <div class="grid">
-            <label>Username <input type="text" id="source-username" autocomplete="username" /></label>
-            <label>Password <input type="password" id="source-password" autocomplete="current-password" /></label>
+          <label>Database <input type="text" id="shared-database" /></label>
+          <div class="grid-2">
+            <label>Username <input type="text" id="shared-username" autocomplete="username" /></label>
+            <label>Password <input type="password" id="shared-password" autocomplete="current-password" /></label>
           </div>
-          <small style="color:var(--pico-muted-color)">⚠ Credentials are held in memory only and never stored to disk.</small>
+          <small>⚠ Credentials are held in memory only and never stored to disk.</small>
         </div>
-      </fieldset>
+      </div>
 
-      <!-- ── TARGET SIDE ── -->
-      <fieldset>
-        <legend>Target</legend>
-        <label>Source type
-          <select id="target-type" onchange="onSourceTypeChange('target')">
-            <option value="file">CSV File</option>
-            <option value="sqlserver">SQL Server</option>
-          </select>
-        </label>
-        <div id="target-file-section">
-          <label>
-            File path
-            <div class="file-row">
-              <input type="text" id="target-path" placeholder="Path to target CSV…" />
-              <button type="button" id="browse-target" class="secondary outline">Browse</button>
-            </div>
+      <!-- ── SOURCE + TARGET SIDE BY SIDE ── -->
+      <div class="source-pair">
+
+        <!-- SOURCE -->
+        <fieldset>
+          <legend>Source</legend>
+          <label>Type
+            <select id="source-type" onchange="onSourceTypeChange()">
+              <option value="file">CSV File</option>
+              <option value="sqlserver">SQL Server</option>
+            </select>
           </label>
-        </div>
-        <div id="target-db-section" style="display:none">
-          <div class="grid">
-            <label>Host <input type="text" id="target-host" placeholder="localhost" /></label>
-            <label>Port <input type="number" id="target-port" placeholder="1433" value="1433" /></label>
+          <div id="source-file-section">
+            <label>File path
+              <div class="file-row">
+                <input type="text" id="source-path" placeholder="Path to source CSV…" />
+                <button type="button" id="browse-source" class="secondary">Browse</button>
+              </div>
+            </label>
           </div>
-          <label>Database <input type="text" id="target-database" /></label>
-          <label>Table or Query <input type="text" id="target-query" placeholder="dbo.customers  or  SELECT * FROM …" /></label>
-          <div class="grid">
-            <label>Username <input type="text" id="target-username" autocomplete="username" /></label>
-            <label>Password <input type="password" id="target-password" autocomplete="current-password" /></label>
+          <div id="source-db-section" style="display:none">
+            <div id="source-own-conn">
+              <div class="grid-2">
+                <label>Host <input type="text" id="source-host" placeholder="localhost" /></label>
+                <label>Port <input type="number" id="source-port" placeholder="1433" value="1433" /></label>
+              </div>
+              <label>Database <input type="text" id="source-database" /></label>
+              <div class="grid-2">
+                <label>Username <input type="text" id="source-username" autocomplete="username" /></label>
+                <label>Password <input type="password" id="source-password" autocomplete="current-password" /></label>
+              </div>
+              <small>⚠ Credentials held in memory only.</small>
+            </div>
+            <label>Table or Query
+              <input type="text" id="source-query" placeholder="dbo.customers  or  SELECT * FROM …" />
+            </label>
           </div>
-          <small style="color:var(--pico-muted-color)">⚠ Credentials are held in memory only and never stored to disk.</small>
-        </div>
-      </fieldset>
+        </fieldset>
 
-      <div class="grid">
-        <label>
-          Key Column(s)
+        <!-- TARGET -->
+        <fieldset>
+          <legend>Target</legend>
+          <label>Type
+            <select id="target-type" onchange="onSourceTypeChange()">
+              <option value="file">CSV File</option>
+              <option value="sqlserver">SQL Server</option>
+            </select>
+          </label>
+          <div id="target-file-section">
+            <label>File path
+              <div class="file-row">
+                <input type="text" id="target-path" placeholder="Path to target CSV…" />
+                <button type="button" id="browse-target" class="secondary">Browse</button>
+              </div>
+            </label>
+          </div>
+          <div id="target-db-section" style="display:none">
+            <div id="target-own-conn">
+              <div class="grid-2">
+                <label>Host <input type="text" id="target-host" placeholder="localhost" /></label>
+                <label>Port <input type="number" id="target-port" placeholder="1433" value="1433" /></label>
+              </div>
+              <label>Database <input type="text" id="target-database" /></label>
+              <div class="grid-2">
+                <label>Username <input type="text" id="target-username" autocomplete="username" /></label>
+                <label>Password <input type="password" id="target-password" autocomplete="current-password" /></label>
+              </div>
+              <small>⚠ Credentials held in memory only.</small>
+            </div>
+            <label>Table or Query
+              <input type="text" id="target-query" placeholder="dbo.orders  or  SELECT * FROM …" />
+            </label>
+          </div>
+        </fieldset>
+
+      </div> <!-- end source-pair -->
+
+      <div class="grid-2">
+        <label>Key Column(s)
           <input type="text" id="keys" placeholder="e.g. id  or  id, order_id" required />
         </label>
-        <label>
-          Numeric Tolerance
+        <label>Numeric Tolerance
           <input type="number" id="tolerance" placeholder="Optional, e.g. 0.01" step="any" min="0" />
         </label>
       </div>
 
-      <div class="grid">
-        <label>
-          Exclude Columns
+      <div class="grid-2">
+        <label>Exclude Columns
           <input type="text" id="exclude" placeholder="Optional comma-separated columns to skip" />
         </label>
-        <label>
-          Only Columns
+        <label>Only Columns
           <input type="text" id="only" placeholder="Optional: compare only these columns" />
         </label>
       </div>
 
       <button type="submit" id="run-btn">Run Diff</button>
-      <span id="spinner" aria-busy="true" style="margin-left:1rem;">Running…</span>
+      <span id="spinner" style="margin-left:1rem;">Running…</span>
     </form>
   </article>
 
@@ -218,19 +478,19 @@
   <div id="tab-schema" class="tab-panel">
   <article>
     <form id="schema-form">
-      <div class="grid">
+      <div class="grid-2">
         <label>
           Source CSV
           <div class="file-row">
             <input type="text" id="schema-source-path" placeholder="Path to source CSV…" required />
-            <button type="button" id="schema-browse-source" class="secondary outline">Browse</button>
+            <button type="button" id="schema-browse-source" class="secondary">Browse</button>
           </div>
         </label>
         <label>
           Target CSV
           <div class="file-row">
             <input type="text" id="schema-target-path" placeholder="Path to target CSV…" required />
-            <button type="button" id="schema-browse-target" class="secondary outline">Browse</button>
+            <button type="button" id="schema-browse-target" class="secondary">Browse</button>
           </div>
         </label>
       </div>
@@ -336,11 +596,34 @@
     document.getElementById('browse-source').addEventListener('click', () => pickFile('source-path'));
     document.getElementById('browse-target').addEventListener('click', () => pickFile('target-path'));
 
-    function onSourceTypeChange(side) {
-      const type = document.getElementById(side + '-type').value;
-      const isFile = type === 'file';
-      document.getElementById(side + '-file-section').style.display = isFile ? '' : 'none';
-      document.getElementById(side + '-db-section').style.display   = isFile ? 'none' : '';
+    function onSourceTypeChange() {
+      const srcType = document.getElementById('source-type').value;
+      const tgtType = document.getElementById('target-type').value;
+      const bothDb  = srcType === 'sqlserver' && tgtType === 'sqlserver';
+
+      // Show/hide file vs db sections per side
+      for (const side of ['source', 'target']) {
+        const type = document.getElementById(side + '-type').value;
+        const isFile = type === 'file';
+        document.getElementById(side + '-file-section').style.display = isFile ? '' : 'none';
+        document.getElementById(side + '-db-section').style.display   = isFile ? 'none' : '';
+      }
+
+      // Show shared-conn panel only when both are SQL Server
+      document.getElementById('shared-conn-panel').style.display = bothDb ? '' : 'none';
+      // If one side changes away from sqlserver, uncheck shared
+      if (!bothDb) {
+        document.getElementById('use-shared-conn').checked = false;
+        onSharedConnChange();
+      }
+    }
+
+    function onSharedConnChange() {
+      const shared = document.getElementById('use-shared-conn').checked;
+      document.getElementById('shared-conn-fields').style.display = shared ? '' : 'none';
+      // Hide/show per-side connection credentials
+      document.getElementById('source-own-conn').style.display = shared ? 'none' : '';
+      document.getElementById('target-own-conn').style.display = shared ? 'none' : '';
     }
 
     function buildSourceConfig(side) {
@@ -350,15 +633,17 @@
         if (!path) throw new Error(`${side} file path is required`);
         return { type: 'file', path };
       }
-      // SQL Server
-      const host     = document.getElementById(side + '-host').value.trim();
-      const portRaw  = document.getElementById(side + '-port').value.trim();
-      const database = document.getElementById(side + '-database').value.trim();
+      // SQL Server — check if shared connection is active
+      const shared = document.getElementById('use-shared-conn').checked;
+      const prefix = shared ? 'shared' : side;
+      const host     = document.getElementById(prefix + '-host').value.trim();
+      const portRaw  = document.getElementById(prefix + '-port').value.trim();
+      const database = document.getElementById(prefix + '-database').value.trim();
+      const username = document.getElementById(prefix + '-username').value.trim();
+      const password = document.getElementById(prefix + '-password').value;
       const query    = document.getElementById(side + '-query').value.trim();
-      const username = document.getElementById(side + '-username').value.trim();
-      const password = document.getElementById(side + '-password').value;
       if (!host || !database || !query || !username) {
-        throw new Error(`${side} SQL Server connection: host, database, table/query, and username are required`);
+        throw new Error(`${side} SQL Server: host, database, table/query, and username are required`);
       }
       return {
         type: 'sql_server',
