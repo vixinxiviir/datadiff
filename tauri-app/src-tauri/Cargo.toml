@@ -17,3 +17,4 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 datadiff = { path = "../.." }
 tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
+keyring = "3"

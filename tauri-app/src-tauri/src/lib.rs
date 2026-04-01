@@ -1,3 +1,39 @@
+use datadiff::connectors::profiles::{ConnectionProfile, ProfileError};
+
+// ── Profile commands ────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn list_profiles() -> Result<Vec<ConnectionProfile>, String> {
+    datadiff::connectors::profiles::list_profiles()
+        .map_err(|e: ProfileError| e.to_string())
+}
+
+#[tauri::command]
+fn save_profile(profile: ConnectionProfile, password: String) -> Result<(), String> {
+    datadiff::connectors::profiles::save_profile(profile, &password)
+        .map_err(|e: ProfileError| e.to_string())
+}
+
+#[tauri::command]
+fn update_profile(profile: ConnectionProfile, password: Option<String>) -> Result<(), String> {
+    datadiff::connectors::profiles::update_profile(profile, password.as_deref())
+        .map_err(|e: ProfileError| e.to_string())
+}
+
+#[tauri::command]
+fn delete_profile(name: String) -> Result<(), String> {
+    datadiff::connectors::profiles::delete_profile(&name)
+        .map_err(|e: ProfileError| e.to_string())
+}
+
+#[tauri::command]
+fn get_profile_password(name: String) -> Result<String, String> {
+    datadiff::connectors::profiles::get_password(&name)
+        .map_err(|e: ProfileError| e.to_string())
+}
+
+// ── Diff commands ────────────────────────────────────────────────────────────
+
 #[tauri::command]
 fn run_diff(
     path1: String,
@@ -19,11 +55,19 @@ fn run_diff(
 }
 
 #[tauri::command]
-fn run_schema_diff(
-    path1: String,
-    path2: String,
+async fn run_schema_diff(
+    source1: datadiff::connectors::SourceConfig,
+    source2: datadiff::connectors::SourceConfig,
 ) -> Result<datadiff::schema::SchemaDiffResult, String> {
-    datadiff::schema::run_schema_diff(&path1, &path2, None)
+    let label1 = source1.label();
+    let label2 = source2.label();
+    let df1 = datadiff::connectors::load_source(&source1)
+        .await
+        .map_err(|e| e.to_string())?;
+    let df2 = datadiff::connectors::load_source(&source2)
+        .await
+        .map_err(|e| e.to_string())?;
+    datadiff::schema::run_schema_diff_frames(df1, df2, &label1, &label2)
         .map_err(|e| e.to_string())
 }
 
@@ -61,7 +105,10 @@ async fn run_source_diff(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![run_diff, run_schema_diff, run_source_diff])
+        .invoke_handler(tauri::generate_handler![
+            list_profiles, save_profile, update_profile, delete_profile, get_profile_password,
+            run_diff, run_schema_diff, run_source_diff,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

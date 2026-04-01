@@ -105,6 +105,11 @@ struct AllowedTypeChange {
     to: String,
 }
 
+/// Returns structured schema diff data from pre-loaded DataFrames. Used by the GUI when sources are SQL Server or other connectors.
+pub fn run_schema_diff_frames(df1: DataFrame, df2: DataFrame, source_label: &str, target_label: &str) -> Result<SchemaDiffResult, SchemaDiffError> {
+    run_schema_diff_inner(&df1, &df2, source_label, target_label, None)
+}
+
 /// Returns structured schema diff data — no terminal output. Used by the GUI and `--json` mode.
 pub fn run_schema_diff(path1: &str, path2: &str, policy_path: Option<&str>) -> Result<SchemaDiffResult, SchemaDiffError> {
     let df1 = CsvReader::from_path(path1)?
@@ -117,8 +122,12 @@ pub fn run_schema_diff(path1: &str, path2: &str, policy_path: Option<&str>) -> R
         .has_header(true)
         .finish()?;
 
-    let source_schema = schema_map(&df1)?;
-    let target_schema = schema_map(&df2)?;
+    run_schema_diff_inner(&df1, &df2, path1, path2, policy_path)
+}
+
+fn run_schema_diff_inner(df1: &DataFrame, df2: &DataFrame, source_label: &str, target_label: &str, policy_path: Option<&str>) -> Result<SchemaDiffResult, SchemaDiffError> {
+    let source_schema = schema_map(df1)?;
+    let target_schema = schema_map(df2)?;
 
     let source_cols: BTreeSet<String> = source_schema.keys().cloned().collect();
     let target_cols: BTreeSet<String> = target_schema.keys().cloned().collect();
@@ -156,8 +165,8 @@ pub fn run_schema_diff(path1: &str, path2: &str, policy_path: Option<&str>) -> R
     };
 
     Ok(SchemaDiffResult {
-        source_path: path1.to_string(),
-        target_path: path2.to_string(),
+        source_path: source_label.to_string(),
+        target_path: target_label.to_string(),
         added,
         removed,
         type_changes,

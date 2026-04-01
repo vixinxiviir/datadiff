@@ -267,6 +267,33 @@
       margin: 0;
       accent-color: var(--blue);
     }
+    .profile-row {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-bottom: 0.6rem;
+    }
+    .profile-row select {
+      flex: 1;
+      margin: 0;
+      font-size: 0.85rem;
+      padding: 0.3rem 0.5rem;
+    }
+    button.small {
+      padding: 0.25rem 0.6rem;
+      font-size: 0.78rem;
+      min-width: 0;
+      white-space: nowrap;
+    }
+    button.danger {
+      background: var(--red-dim);
+      border-color: var(--red);
+      color: var(--red);
+    }
+    button.danger:hover {
+      background: var(--red);
+      color: var(--bg);
+    }
 
     #results, #schema-results { margin-top: 0.5rem; }
   </style>
@@ -294,6 +321,11 @@
           </label>
         </div>
         <div id="shared-conn-fields" style="display:none">
+          <div class="profile-row">
+            <select id="shared-profile" onchange="loadProfile('shared')"><option value="">— Saved profiles —</option></select>
+            <button type="button" class="secondary small" onclick="saveProfile('shared')">Save</button>
+            <button type="button" class="secondary small danger" onclick="deleteProfile('shared')">Delete</button>
+          </div>
           <div class="grid-2">
             <label>Host <input type="text" id="shared-host" placeholder="localhost" /></label>
             <label>Port <input type="number" id="shared-port" placeholder="1433" value="1433" /></label>
@@ -303,7 +335,7 @@
             <label>Username <input type="text" id="shared-username" autocomplete="username" /></label>
             <label>Password <input type="password" id="shared-password" autocomplete="current-password" /></label>
           </div>
-          <small>⚠ Credentials are held in memory only and never stored to disk.</small>
+          <small>⚠ Credentials are held in memory only and never stored to disk. Saved passwords go to the OS keychain.</small>
         </div>
       </div>
 
@@ -317,6 +349,7 @@
             <select id="source-type" onchange="onSourceTypeChange()">
               <option value="file">CSV File</option>
               <option value="sqlserver">SQL Server</option>
+              <option value="postgres">PostgreSQL</option>
             </select>
           </label>
           <div id="source-file-section">
@@ -329,6 +362,11 @@
           </div>
           <div id="source-db-section" style="display:none">
             <div id="source-own-conn">
+              <div class="profile-row">
+                <select id="source-profile" onchange="loadProfile('source')"><option value="">— Saved profiles —</option></select>
+                <button type="button" class="secondary small" onclick="saveProfile('source')">Save</button>
+                <button type="button" class="secondary small danger" onclick="deleteProfile('source')">Delete</button>
+              </div>
               <div class="grid-2">
                 <label>Host <input type="text" id="source-host" placeholder="localhost" /></label>
                 <label>Port <input type="number" id="source-port" placeholder="1433" value="1433" /></label>
@@ -338,7 +376,7 @@
                 <label>Username <input type="text" id="source-username" autocomplete="username" /></label>
                 <label>Password <input type="password" id="source-password" autocomplete="current-password" /></label>
               </div>
-              <small>⚠ Credentials held in memory only.</small>
+              <small>⚠ Credentials held in memory only and never stored to disk. Saved passwords go to the OS keychain.</small>
             </div>
             <label>Table or Query
               <input type="text" id="source-query" placeholder="dbo.customers  or  SELECT * FROM …" />
@@ -353,6 +391,7 @@
             <select id="target-type" onchange="onSourceTypeChange()">
               <option value="file">CSV File</option>
               <option value="sqlserver">SQL Server</option>
+              <option value="postgres">PostgreSQL</option>
             </select>
           </label>
           <div id="target-file-section">
@@ -365,6 +404,11 @@
           </div>
           <div id="target-db-section" style="display:none">
             <div id="target-own-conn">
+              <div class="profile-row">
+                <select id="target-profile" onchange="loadProfile('target')"><option value="">— Saved profiles —</option></select>
+                <button type="button" class="secondary small" onclick="saveProfile('target')">Save</button>
+                <button type="button" class="secondary small danger" onclick="deleteProfile('target')">Delete</button>
+              </div>
               <div class="grid-2">
                 <label>Host <input type="text" id="target-host" placeholder="localhost" /></label>
                 <label>Port <input type="number" id="target-port" placeholder="1433" value="1433" /></label>
@@ -374,7 +418,7 @@
                 <label>Username <input type="text" id="target-username" autocomplete="username" /></label>
                 <label>Password <input type="password" id="target-password" autocomplete="current-password" /></label>
               </div>
-              <small>⚠ Credentials held in memory only.</small>
+              <small>⚠ Credentials held in memory only and never stored to disk. Saved passwords go to the OS keychain.</small>
             </div>
             <label>Table or Query
               <input type="text" id="target-query" placeholder="dbo.orders  or  SELECT * FROM …" />
@@ -478,31 +522,132 @@
   <div id="tab-schema" class="tab-panel">
   <article>
     <form id="schema-form">
-      <div class="grid-2">
-        <label>
-          Source CSV
-          <div class="file-row">
-            <input type="text" id="schema-source-path" placeholder="Path to source CSV…" required />
-            <button type="button" id="schema-browse-source" class="secondary">Browse</button>
+
+      <!-- ── SHARED CONNECTION (shown when both sides are SQL Server) ── -->
+      <div id="s-shared-conn-panel" style="display:none">
+        <div class="shared-toggle-row">
+          <input type="checkbox" id="s-use-shared-conn" onchange="onSchemaSharedConnChange()" />
+          <label for="s-use-shared-conn" style="display:inline; margin:0; color:var(--fg2); font-size:0.88rem;">
+            Use shared connection for both sides
+          </label>
+        </div>
+        <div id="s-shared-conn-fields" style="display:none">
+          <div class="profile-row">
+            <select id="s-shared-profile" onchange="loadProfile('s-shared')"><option value="">— Saved profiles —</option></select>
+            <button type="button" class="secondary small" onclick="saveProfile('s-shared')">Save</button>
+            <button type="button" class="secondary small danger" onclick="deleteProfile('s-shared')">Delete</button>
           </div>
-        </label>
-        <label>
-          Target CSV
-          <div class="file-row">
-            <input type="text" id="schema-target-path" placeholder="Path to target CSV…" required />
-            <button type="button" id="schema-browse-target" class="secondary">Browse</button>
+          <div class="grid-2">
+            <label>Host <input type="text" id="s-shared-host" placeholder="localhost" /></label>
+            <label>Port <input type="number" id="s-shared-port" placeholder="1433" value="1433" /></label>
           </div>
-        </label>
+          <label>Database <input type="text" id="s-shared-database" /></label>
+          <div class="grid-2">
+            <label>Username <input type="text" id="s-shared-username" autocomplete="username" /></label>
+            <label>Password <input type="password" id="s-shared-password" autocomplete="current-password" /></label>
+          </div>
+          <small>⚠ Credentials are held in memory only and never stored to disk. Saved passwords go to the OS keychain.</small>
+        </div>
       </div>
+
+      <!-- ── SOURCE + TARGET SIDE BY SIDE ── -->
+      <div class="source-pair">
+
+        <!-- SOURCE -->
+        <fieldset>
+          <legend>Source</legend>
+          <label>Type
+            <select id="s-source-type" onchange="onSchemaSourceTypeChange()">
+              <option value="file">CSV File</option>
+              <option value="sqlserver">SQL Server</option>
+              <option value="postgres">PostgreSQL</option>
+            </select>
+          </label>
+          <div id="s-source-file-section">
+            <label>File path
+              <div class="file-row">
+                <input type="text" id="s-source-path" placeholder="Path to source CSV…" />
+                <button type="button" id="schema-browse-source" class="secondary">Browse</button>
+              </div>
+            </label>
+          </div>
+          <div id="s-source-db-section" style="display:none">
+            <div id="s-source-own-conn">
+              <div class="profile-row">
+                <select id="s-source-profile" onchange="loadProfile('s-source')"><option value="">— Saved profiles —</option></select>
+                <button type="button" class="secondary small" onclick="saveProfile('s-source')">Save</button>
+                <button type="button" class="secondary small danger" onclick="deleteProfile('s-source')">Delete</button>
+              </div>
+              <div class="grid-2">
+                <label>Host <input type="text" id="s-source-host" placeholder="localhost" /></label>
+                <label>Port <input type="number" id="s-source-port" placeholder="1433" value="1433" /></label>
+              </div>
+              <label>Database <input type="text" id="s-source-database" /></label>
+              <div class="grid-2">
+                <label>Username <input type="text" id="s-source-username" autocomplete="username" /></label>
+                <label>Password <input type="password" id="s-source-password" autocomplete="current-password" /></label>
+              </div>
+              <small>⚠ Credentials held in memory only and never stored to disk. Saved passwords go to the OS keychain.</small>
+            </div>
+            <label>Table or Query
+              <input type="text" id="s-source-query" placeholder="dbo.customers  or  SELECT * FROM …" />
+            </label>
+          </div>
+        </fieldset>
+
+        <!-- TARGET -->
+        <fieldset>
+          <legend>Target</legend>
+          <label>Type
+            <select id="s-target-type" onchange="onSchemaSourceTypeChange()">
+              <option value="file">CSV File</option>
+              <option value="sqlserver">SQL Server</option>
+              <option value="postgres">PostgreSQL</option>
+            </select>
+          </label>
+          <div id="s-target-file-section">
+            <label>File path
+              <div class="file-row">
+                <input type="text" id="s-target-path" placeholder="Path to target CSV…" />
+                <button type="button" id="schema-browse-target" class="secondary">Browse</button>
+              </div>
+            </label>
+          </div>
+          <div id="s-target-db-section" style="display:none">
+            <div id="s-target-own-conn">
+              <div class="profile-row">
+                <select id="s-target-profile" onchange="loadProfile('s-target')"><option value="">— Saved profiles —</option></select>
+                <button type="button" class="secondary small" onclick="saveProfile('s-target')">Save</button>
+                <button type="button" class="secondary small danger" onclick="deleteProfile('s-target')">Delete</button>
+              </div>
+              <div class="grid-2">
+                <label>Host <input type="text" id="s-target-host" placeholder="localhost" /></label>
+                <label>Port <input type="number" id="s-target-port" placeholder="1433" value="1433" /></label>
+              </div>
+              <label>Database <input type="text" id="s-target-database" /></label>
+              <div class="grid-2">
+                <label>Username <input type="text" id="s-target-username" autocomplete="username" /></label>
+                <label>Password <input type="password" id="s-target-password" autocomplete="current-password" /></label>
+              </div>
+              <small>⚠ Credentials held in memory only and never stored to disk. Saved passwords go to the OS keychain.</small>
+            </div>
+            <label>Table or Query
+              <input type="text" id="s-target-query" placeholder="dbo.orders  or  SELECT * FROM …" />
+            </label>
+          </div>
+        </fieldset>
+
+      </div> <!-- end source-pair -->
+
       <button type="submit" id="schema-run-btn">Run Schema Diff</button>
       <span id="schema-spinner" style="display:none; margin-left:1rem;" aria-busy="true">Running…</span>
     </form>
   </article>
 
   <div id="schema-error-box" style="display:none">
-    <article style="border-color: #f44336;">
+    <div class="error-card">
       <strong>Error:</strong> <span id="schema-error-msg"></span>
-    </article>
+    </div>
   </div>
 
   <div id="schema-results" style="display:none">
@@ -575,6 +720,110 @@
   </div> <!-- end tab-schema -->
 
   <script>
+    // ── UTILITIES ──────────────────────────────────────────────────────────
+    function setDefaultPort(portInputId, dbType) {
+      const el = document.getElementById(portInputId);
+      if (!el) return;
+      const defaultPort = dbType === 'postgres' ? 5432 : 1433;
+      // Only override if the value still matches the other engine's default
+      if (!el.value || el.value === '1433' || el.value === '5432') {
+        el.value = defaultPort;
+        el.placeholder = String(defaultPort);
+      }
+    }
+
+    // ── GLOBAL PROFILE STATE ───────────────────────────────────────────────
+    // All profile selects share the same set of profiles; we sync them on load.
+    let _profiles = [];
+
+    const PROFILE_SELECTS = ['shared-profile', 'source-profile', 'target-profile', 's-shared-profile', 's-source-profile', 's-target-profile'];
+
+    async function refreshProfiles() {
+      try {
+        const { invoke } = getTauri().core;
+        _profiles = await invoke('list_profiles');
+      } catch (_) {
+        _profiles = [];
+      }
+      PROFILE_SELECTS.forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const current = sel.value;
+        sel.innerHTML = '<option value="">— Saved profiles —</option>';
+        _profiles.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.name;
+          opt.textContent = `${p.name}  (${p.host}/${p.database})`;
+          sel.appendChild(opt);
+        });
+        sel.value = current;
+      });
+    }
+
+    // side = 'source' | 'target' | 's-source' | 's-target'
+    async function loadProfile(side) {
+      const sel = document.getElementById(side + '-profile');
+      const name = sel.value;
+      if (!name) return;
+      const prof = _profiles.find(p => p.name === name);
+      if (!prof) return;
+      document.getElementById(side + '-host').value     = prof.host;
+      document.getElementById(side + '-port').value     = prof.port ?? 1433;
+      document.getElementById(side + '-database').value = prof.database;
+      document.getElementById(side + '-username').value = prof.username;
+      document.getElementById(side + '-password').value = '';
+      try {
+        const { invoke } = getTauri().core;
+        const pwd = await invoke('get_profile_password', { name });
+        document.getElementById(side + '-password').value = pwd;
+      } catch (_) { /* leave blank if keychain fails */ }
+    }
+
+    async function saveProfile(side) {
+      const name = prompt('Profile name:');
+      if (!name || !name.trim()) return;
+      const host     = document.getElementById(side + '-host').value.trim();
+      const port     = parseInt(document.getElementById(side + '-port').value, 10) || null;
+      const database = document.getElementById(side + '-database').value.trim();
+      const username = document.getElementById(side + '-username').value.trim();
+      const password = document.getElementById(side + '-password').value;
+      if (!host || !database || !username) {
+        alert('Host, database, and username are required to save a profile.');
+        return;
+      }
+      // Determine db_type from the type select for this side
+      const typeSelId = side.startsWith('s-') ? side + '-type' : side + '-type';
+      const db_type = document.getElementById(typeSelId)?.value ?? 'sqlserver';
+      try {
+        const { invoke } = getTauri().core;
+        const existing = _profiles.find(p => p.name === name.trim());
+        if (existing) {
+          await invoke('update_profile', { profile: { name: name.trim(), db_type, host, port, database, username }, password: password || null });
+        } else {
+          await invoke('save_profile', { profile: { name: name.trim(), db_type, host, port, database, username }, password });
+        }
+        await refreshProfiles();
+        // Select the newly saved profile in the current dropdown
+        document.getElementById(side + '-profile').value = name.trim();
+      } catch (err) {
+        alert('Failed to save profile: ' + err);
+      }
+    }
+
+    async function deleteProfile(side) {
+      const sel = document.getElementById(side + '-profile');
+      const name = sel.value;
+      if (!name) { alert('Select a profile to delete.'); return; }
+      if (!confirm(`Delete profile "${name}"?`)) return;
+      try {
+        const { invoke } = getTauri().core;
+        await invoke('delete_profile', { name });
+        await refreshProfiles();
+      } catch (err) {
+        alert('Failed to delete profile: ' + err);
+      }
+    }
+
     function getTauri() {
       if (!window.__TAURI__) {
         alert('Tauri API not available. Make sure withGlobalTauri is enabled in tauri.conf.json.');
@@ -599,19 +848,26 @@
     function onSourceTypeChange() {
       const srcType = document.getElementById('source-type').value;
       const tgtType = document.getElementById('target-type').value;
-      const bothDb  = srcType === 'sqlserver' && tgtType === 'sqlserver';
+      const bothDb  = srcType !== 'file' && tgtType !== 'file' && srcType === tgtType;
 
-      // Show/hide file vs db sections per side
+      // Show/hide file vs db sections per side; update default port
       for (const side of ['source', 'target']) {
         const type = document.getElementById(side + '-type').value;
         const isFile = type === 'file';
         document.getElementById(side + '-file-section').style.display = isFile ? '' : 'none';
         document.getElementById(side + '-db-section').style.display   = isFile ? 'none' : '';
+        if (!isFile) {
+          setDefaultPort(side + '-port', type);
+          const qPlaceholder = type === 'postgres'
+            ? 'public.customers  or  SELECT * FROM …'
+            : 'dbo.customers  or  SELECT * FROM …';
+          const qEl = document.getElementById(side + '-query');
+          if (qEl) qEl.placeholder = qPlaceholder;
+        }
       }
 
-      // Show shared-conn panel only when both are SQL Server
+      // Show shared-conn panel only when both sides are the same DB type
       document.getElementById('shared-conn-panel').style.display = bothDb ? '' : 'none';
-      // If one side changes away from sqlserver, uncheck shared
       if (!bothDb) {
         document.getElementById('use-shared-conn').checked = false;
         onSharedConnChange();
@@ -633,7 +889,7 @@
         if (!path) throw new Error(`${side} file path is required`);
         return { type: 'file', path };
       }
-      // SQL Server — check if shared connection is active
+      // DB — check if shared connection is active
       const shared = document.getElementById('use-shared-conn').checked;
       const prefix = shared ? 'shared' : side;
       const host     = document.getElementById(prefix + '-host').value.trim();
@@ -642,11 +898,12 @@
       const username = document.getElementById(prefix + '-username').value.trim();
       const password = document.getElementById(prefix + '-password').value;
       const query    = document.getElementById(side + '-query').value.trim();
+      const dbLabel  = type === 'postgres' ? 'PostgreSQL' : 'SQL Server';
       if (!host || !database || !query || !username) {
-        throw new Error(`${side} SQL Server: host, database, table/query, and username are required`);
+        throw new Error(`${side} ${dbLabel}: host, database, table/query, and username are required`);
       }
       return {
-        type: 'sql_server',
+        type: type === 'postgres' ? 'postgres' : 'sql_server',
         host,
         port: portRaw ? parseInt(portRaw, 10) : null,
         database,
@@ -775,9 +1032,76 @@
       });
     });
 
+    // Load saved profiles once the app is ready
+    refreshProfiles();
+
     // ── SCHEMA DIFF ──
-    document.getElementById('schema-browse-source').addEventListener('click', () => pickFile('schema-source-path'));
-    document.getElementById('schema-browse-target').addEventListener('click', () => pickFile('schema-target-path'));
+    document.getElementById('schema-browse-source').addEventListener('click', () => pickFile('s-source-path'));
+    document.getElementById('schema-browse-target').addEventListener('click', () => pickFile('s-target-path'));
+
+    function onSchemaSourceTypeChange() {
+      const srcType = document.getElementById('s-source-type').value;
+      const tgtType = document.getElementById('s-target-type').value;
+      const bothDb  = srcType !== 'file' && tgtType !== 'file' && srcType === tgtType;
+
+      for (const side of ['s-source', 's-target']) {
+        const type = document.getElementById(side + '-type').value;
+        const isFile = type === 'file';
+        document.getElementById(side + '-file-section').style.display = isFile ? '' : 'none';
+        document.getElementById(side + '-db-section').style.display   = isFile ? 'none' : '';
+        if (!isFile) {
+          setDefaultPort(side + '-port', type);
+          const qPlaceholder = type === 'postgres'
+            ? 'public.customers  or  SELECT * FROM …'
+            : 'dbo.customers  or  SELECT * FROM …';
+          const qEl = document.getElementById(side + '-query');
+          if (qEl) qEl.placeholder = qPlaceholder;
+        }
+      }
+
+      document.getElementById('s-shared-conn-panel').style.display = bothDb ? '' : 'none';
+      if (!bothDb) {
+        document.getElementById('s-use-shared-conn').checked = false;
+        onSchemaSharedConnChange();
+      }
+    }
+
+    function onSchemaSharedConnChange() {
+      const shared = document.getElementById('s-use-shared-conn').checked;
+      document.getElementById('s-shared-conn-fields').style.display = shared ? '' : 'none';
+      document.getElementById('s-source-own-conn').style.display = shared ? 'none' : '';
+      document.getElementById('s-target-own-conn').style.display = shared ? 'none' : '';
+    }
+
+    function buildSchemaSourceConfig(side) {
+      const type = document.getElementById('s-' + side + '-type').value;
+      if (type === 'file') {
+        const path = document.getElementById('s-' + side + '-path').value.trim();
+        if (!path) throw new Error(`${side} file path is required`);
+        return { type: 'file', path };
+      }
+      const shared = document.getElementById('s-use-shared-conn').checked;
+      const prefix = shared ? 's-shared' : 's-' + side;
+      const host     = document.getElementById(prefix + '-host').value.trim();
+      const portRaw  = document.getElementById(prefix + '-port').value.trim();
+      const database = document.getElementById(prefix + '-database').value.trim();
+      const username = document.getElementById(prefix + '-username').value.trim();
+      const password = document.getElementById(prefix + '-password').value;
+      const query    = document.getElementById('s-' + side + '-query').value.trim();
+      const dbLabel  = type === 'postgres' ? 'PostgreSQL' : 'SQL Server';
+      if (!host || !database || !query || !username) {
+        throw new Error(`${side} ${dbLabel}: host, database, table/query, and username are required`);
+      }
+      return {
+        type: type === 'postgres' ? 'postgres' : 'sql_server',
+        host,
+        port: portRaw ? parseInt(portRaw, 10) : null,
+        database,
+        query,
+        username,
+        password,
+      };
+    }
 
     function compatBadge(ok) {
       return `<span class="compat-badge ${ok ? 'compat-ok' : 'compat-bad'}">${ok ? 'Yes' : 'No'}</span>`;
@@ -835,12 +1159,11 @@
       document.getElementById('schema-spinner').style.display = 'inline';
       document.getElementById('schema-run-btn').setAttribute('aria-busy', 'true');
 
-      const path1 = document.getElementById('schema-source-path').value.trim();
-      const path2 = document.getElementById('schema-target-path').value.trim();
-
       try {
+        const source1 = buildSchemaSourceConfig('source');
+        const source2 = buildSchemaSourceConfig('target');
         const { invoke } = getTauri().core;
-        const result = await invoke('run_schema_diff', { path1, path2 });
+        const result = await invoke('run_schema_diff', { source1, source2 });
         renderSchemaResults(result);
       } catch (err) {
         document.getElementById('schema-error-msg').textContent = err;

@@ -1,5 +1,7 @@
 pub mod csv;
 pub mod sqlserver;
+pub mod postgres;
+pub mod profiles;
 
 use polars::prelude::DataFrame;
 use serde::{Deserialize, Serialize};
@@ -22,6 +24,16 @@ pub enum SourceConfig {
         /// Either a bare table reference ("dbo.customers") or a full SELECT query.
         query: String,
     },
+    Postgres {
+        host: String,
+        /// Defaults to 5432 when omitted.
+        port: Option<u16>,
+        database: String,
+        username: String,
+        password: String,
+        /// Either a bare table/schema reference ("public.customers") or a full SELECT query.
+        query: String,
+    },
 }
 
 impl SourceConfig {
@@ -31,6 +43,9 @@ impl SourceConfig {
             SourceConfig::File { path } => path.clone(),
             SourceConfig::SqlServer { host, port, database, query, .. } => {
                 format!("{}:{}/{}/{}", host, port.unwrap_or(1433), database, query)
+            }
+            SourceConfig::Postgres { host, port, database, query, .. } => {
+                format!("{}:{}/{}/{}", host, port.unwrap_or(5432), database, query)
             }
         }
     }
@@ -77,6 +92,10 @@ pub async fn load_source(config: &SourceConfig) -> Result<DataFrame, ConnectorEr
         SourceConfig::File { path } => csv::load(path),
         SourceConfig::SqlServer { host, port, database, username, password, query } => {
             sqlserver::load_async(host, port.unwrap_or(1433), database, username, password, query)
+                .await
+        }
+        SourceConfig::Postgres { host, port, database, username, password, query } => {
+            postgres::load_async(host, port.unwrap_or(5432), database, username, password, query)
                 .await
         }
     }
