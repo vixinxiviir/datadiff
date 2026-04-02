@@ -6,8 +6,9 @@ tauri-app/src-tauri/target/
 /outputs-*/
 /myresults/
 
-# Tauri generated icons (regenerated from source)
-tauri-app/src-tauri/icons/
+# Tauri mobile icon outputs
+tauri-app/src-tauri/icons/android/
+tauri-app/src-tauri/icons/ios/
 
 # Local virtual environments
 /.venv/
