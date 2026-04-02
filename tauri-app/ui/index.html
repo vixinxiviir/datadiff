@@ -350,6 +350,8 @@
               <option value="file">CSV File</option>
               <option value="sqlserver">SQL Server</option>
               <option value="postgres">PostgreSQL</option>
+              <option value="mysql">MySQL / MariaDB</option>
+              <option value="sqlite">SQLite</option>
             </select>
           </label>
           <div id="source-file-section">
@@ -358,6 +360,17 @@
                 <input type="text" id="source-path" placeholder="Path to source CSV…" />
                 <button type="button" id="browse-source" class="secondary">Browse</button>
               </div>
+            </label>
+          </div>
+          <div id="source-sqlite-section" style="display:none">
+            <label>Database file
+              <div class="file-row">
+                <input type="text" id="source-sqlite-path" placeholder="Path to .db file…" />
+                <button type="button" id="browse-source-sqlite" class="secondary">Browse</button>
+              </div>
+            </label>
+            <label>Table or Query
+              <input type="text" id="source-sqlite-query" placeholder="customers  or  SELECT * FROM …" />
             </label>
           </div>
           <div id="source-db-section" style="display:none">
@@ -392,6 +405,8 @@
               <option value="file">CSV File</option>
               <option value="sqlserver">SQL Server</option>
               <option value="postgres">PostgreSQL</option>
+              <option value="mysql">MySQL / MariaDB</option>
+              <option value="sqlite">SQLite</option>
             </select>
           </label>
           <div id="target-file-section">
@@ -400,6 +415,17 @@
                 <input type="text" id="target-path" placeholder="Path to target CSV…" />
                 <button type="button" id="browse-target" class="secondary">Browse</button>
               </div>
+            </label>
+          </div>
+          <div id="target-sqlite-section" style="display:none">
+            <label>Database file
+              <div class="file-row">
+                <input type="text" id="target-sqlite-path" placeholder="Path to .db file…" />
+                <button type="button" id="browse-target-sqlite" class="secondary">Browse</button>
+              </div>
+            </label>
+            <label>Table or Query
+              <input type="text" id="target-sqlite-query" placeholder="customers  or  SELECT * FROM …" />
             </label>
           </div>
           <div id="target-db-section" style="display:none">
@@ -561,6 +587,8 @@
               <option value="file">CSV File</option>
               <option value="sqlserver">SQL Server</option>
               <option value="postgres">PostgreSQL</option>
+              <option value="mysql">MySQL / MariaDB</option>
+              <option value="sqlite">SQLite</option>
             </select>
           </label>
           <div id="s-source-file-section">
@@ -569,6 +597,17 @@
                 <input type="text" id="s-source-path" placeholder="Path to source CSV…" />
                 <button type="button" id="schema-browse-source" class="secondary">Browse</button>
               </div>
+            </label>
+          </div>
+          <div id="s-source-sqlite-section" style="display:none">
+            <label>Database file
+              <div class="file-row">
+                <input type="text" id="s-source-sqlite-path" placeholder="Path to .db file…" />
+                <button type="button" id="schema-browse-source-sqlite" class="secondary">Browse</button>
+              </div>
+            </label>
+            <label>Table or Query
+              <input type="text" id="s-source-sqlite-query" placeholder="customers  or  SELECT * FROM …" />
             </label>
           </div>
           <div id="s-source-db-section" style="display:none">
@@ -603,6 +642,8 @@
               <option value="file">CSV File</option>
               <option value="sqlserver">SQL Server</option>
               <option value="postgres">PostgreSQL</option>
+              <option value="mysql">MySQL / MariaDB</option>
+              <option value="sqlite">SQLite</option>
             </select>
           </label>
           <div id="s-target-file-section">
@@ -611,6 +652,17 @@
                 <input type="text" id="s-target-path" placeholder="Path to target CSV…" />
                 <button type="button" id="schema-browse-target" class="secondary">Browse</button>
               </div>
+            </label>
+          </div>
+          <div id="s-target-sqlite-section" style="display:none">
+            <label>Database file
+              <div class="file-row">
+                <input type="text" id="s-target-sqlite-path" placeholder="Path to .db file…" />
+                <button type="button" id="schema-browse-target-sqlite" class="secondary">Browse</button>
+              </div>
+            </label>
+            <label>Table or Query
+              <input type="text" id="s-target-sqlite-query" placeholder="customers  or  SELECT * FROM …" />
             </label>
           </div>
           <div id="s-target-db-section" style="display:none">
@@ -724,9 +776,9 @@
     function setDefaultPort(portInputId, dbType) {
       const el = document.getElementById(portInputId);
       if (!el) return;
-      const defaultPort = dbType === 'postgres' ? 5432 : 1433;
-      // Only override if the value still matches the other engine's default
-      if (!el.value || el.value === '1433' || el.value === '5432') {
+      const defaultPort = dbType === 'postgres' ? 5432 : dbType === 'mysql' ? 3306 : 1433;
+      // Only override if the value still matches another engine's default
+      if (!el.value || el.value === '1433' || el.value === '5432' || el.value === '3306') {
         el.value = defaultPort;
         el.placeholder = String(defaultPort);
       }
@@ -767,8 +819,20 @@
       if (!name) return;
       const prof = _profiles.find(p => p.name === name);
       if (!prof) return;
+
+      // Pre-select the db type and trigger visibility/port/placeholder updates
+      const typeEl = document.getElementById(side + '-type');
+      if (typeEl && prof.db_type) {
+        typeEl.value = prof.db_type;
+        if (side.startsWith('s-') && side !== 's-shared') {
+          onSchemaSourceTypeChange();
+        } else if (side !== 'shared' && side !== 's-shared') {
+          onSourceTypeChange();
+        }
+      }
+
       document.getElementById(side + '-host').value     = prof.host;
-      document.getElementById(side + '-port').value     = prof.port ?? 1433;
+      document.getElementById(side + '-port').value     = prof.port ?? (prof.db_type === 'postgres' ? 5432 : prof.db_type === 'mysql' ? 3306 : 1433);
       document.getElementById(side + '-database').value = prof.database;
       document.getElementById(side + '-username').value = prof.username;
       document.getElementById(side + '-password').value = '';
@@ -844,22 +908,29 @@
 
     document.getElementById('browse-source').addEventListener('click', () => pickFile('source-path'));
     document.getElementById('browse-target').addEventListener('click', () => pickFile('target-path'));
+    document.getElementById('browse-source-sqlite').addEventListener('click', () => pickFile('source-sqlite-path'));
+    document.getElementById('browse-target-sqlite').addEventListener('click', () => pickFile('target-sqlite-path'));
 
     function onSourceTypeChange() {
       const srcType = document.getElementById('source-type').value;
       const tgtType = document.getElementById('target-type').value;
-      const bothDb  = srcType !== 'file' && tgtType !== 'file' && srcType === tgtType;
+      const bothDb  = srcType !== 'file' && srcType !== 'sqlite' && tgtType !== 'file' && tgtType !== 'sqlite' && srcType === tgtType;
 
-      // Show/hide file vs db sections per side; update default port
+      // Show/hide file vs sqlite vs db sections per side; update default port
       for (const side of ['source', 'target']) {
-        const type = document.getElementById(side + '-type').value;
-        const isFile = type === 'file';
-        document.getElementById(side + '-file-section').style.display = isFile ? '' : 'none';
-        document.getElementById(side + '-db-section').style.display   = isFile ? 'none' : '';
-        if (!isFile) {
+        const type     = document.getElementById(side + '-type').value;
+        const isFile   = type === 'file';
+        const isSqlite = type === 'sqlite';
+        const isDb     = !isFile && !isSqlite;
+        document.getElementById(side + '-file-section').style.display   = isFile   ? '' : 'none';
+        document.getElementById(side + '-sqlite-section').style.display = isSqlite ? '' : 'none';
+        document.getElementById(side + '-db-section').style.display     = isDb     ? '' : 'none';
+        if (isDb) {
           setDefaultPort(side + '-port', type);
           const qPlaceholder = type === 'postgres'
             ? 'public.customers  or  SELECT * FROM …'
+            : type === 'mysql'
+            ? 'customers  or  SELECT * FROM …'
             : 'dbo.customers  or  SELECT * FROM …';
           const qEl = document.getElementById(side + '-query');
           if (qEl) qEl.placeholder = qPlaceholder;
@@ -889,6 +960,12 @@
         if (!path) throw new Error(`${side} file path is required`);
         return { type: 'file', path };
       }
+      if (type === 'sqlite') {
+        const path  = document.getElementById(side + '-sqlite-path').value.trim();
+        const query = document.getElementById(side + '-sqlite-query').value.trim();
+        if (!path || !query) throw new Error(`${side} SQLite: database file path and table/query are required`);
+        return { type: 'sqlite', path, query };
+      }
       // DB — check if shared connection is active
       const shared = document.getElementById('use-shared-conn').checked;
       const prefix = shared ? 'shared' : side;
@@ -898,12 +975,12 @@
       const username = document.getElementById(prefix + '-username').value.trim();
       const password = document.getElementById(prefix + '-password').value;
       const query    = document.getElementById(side + '-query').value.trim();
-      const dbLabel  = type === 'postgres' ? 'PostgreSQL' : 'SQL Server';
+      const dbLabel  = type === 'postgres' ? 'PostgreSQL' : type === 'mysql' ? 'MySQL' : 'SQL Server';
       if (!host || !database || !query || !username) {
         throw new Error(`${side} ${dbLabel}: host, database, table/query, and username are required`);
       }
       return {
-        type: type === 'postgres' ? 'postgres' : 'sql_server',
+        type: type === 'postgres' ? 'postgres' : type === 'mysql' ? 'mysql' : 'sql_server',
         host,
         port: portRaw ? parseInt(portRaw, 10) : null,
         database,
@@ -1038,21 +1115,28 @@
     // ── SCHEMA DIFF ──
     document.getElementById('schema-browse-source').addEventListener('click', () => pickFile('s-source-path'));
     document.getElementById('schema-browse-target').addEventListener('click', () => pickFile('s-target-path'));
+    document.getElementById('schema-browse-source-sqlite').addEventListener('click', () => pickFile('s-source-sqlite-path'));
+    document.getElementById('schema-browse-target-sqlite').addEventListener('click', () => pickFile('s-target-sqlite-path'));
 
     function onSchemaSourceTypeChange() {
       const srcType = document.getElementById('s-source-type').value;
       const tgtType = document.getElementById('s-target-type').value;
-      const bothDb  = srcType !== 'file' && tgtType !== 'file' && srcType === tgtType;
+      const bothDb  = srcType !== 'file' && srcType !== 'sqlite' && tgtType !== 'file' && tgtType !== 'sqlite' && srcType === tgtType;
 
       for (const side of ['s-source', 's-target']) {
-        const type = document.getElementById(side + '-type').value;
-        const isFile = type === 'file';
-        document.getElementById(side + '-file-section').style.display = isFile ? '' : 'none';
-        document.getElementById(side + '-db-section').style.display   = isFile ? 'none' : '';
-        if (!isFile) {
+        const type     = document.getElementById(side + '-type').value;
+        const isFile   = type === 'file';
+        const isSqlite = type === 'sqlite';
+        const isDb     = !isFile && !isSqlite;
+        document.getElementById(side + '-file-section').style.display   = isFile   ? '' : 'none';
+        document.getElementById(side + '-sqlite-section').style.display = isSqlite ? '' : 'none';
+        document.getElementById(side + '-db-section').style.display     = isDb     ? '' : 'none';
+        if (isDb) {
           setDefaultPort(side + '-port', type);
           const qPlaceholder = type === 'postgres'
             ? 'public.customers  or  SELECT * FROM …'
+            : type === 'mysql'
+            ? 'customers  or  SELECT * FROM …'
             : 'dbo.customers  or  SELECT * FROM …';
           const qEl = document.getElementById(side + '-query');
           if (qEl) qEl.placeholder = qPlaceholder;
@@ -1080,6 +1164,12 @@
         if (!path) throw new Error(`${side} file path is required`);
         return { type: 'file', path };
       }
+      if (type === 'sqlite') {
+        const path  = document.getElementById('s-' + side + '-sqlite-path').value.trim();
+        const query = document.getElementById('s-' + side + '-sqlite-query').value.trim();
+        if (!path || !query) throw new Error(`${side} SQLite: database file path and table/query are required`);
+        return { type: 'sqlite', path, query };
+      }
       const shared = document.getElementById('s-use-shared-conn').checked;
       const prefix = shared ? 's-shared' : 's-' + side;
       const host     = document.getElementById(prefix + '-host').value.trim();
@@ -1088,12 +1178,12 @@
       const username = document.getElementById(prefix + '-username').value.trim();
       const password = document.getElementById(prefix + '-password').value;
       const query    = document.getElementById('s-' + side + '-query').value.trim();
-      const dbLabel  = type === 'postgres' ? 'PostgreSQL' : 'SQL Server';
+      const dbLabel  = type === 'postgres' ? 'PostgreSQL' : type === 'mysql' ? 'MySQL' : 'SQL Server';
       if (!host || !database || !query || !username) {
         throw new Error(`${side} ${dbLabel}: host, database, table/query, and username are required`);
       }
       return {
-        type: type === 'postgres' ? 'postgres' : 'sql_server',
+        type: type === 'postgres' ? 'postgres' : type === 'mysql' ? 'mysql' : 'sql_server',
         host,
         port: portRaw ? parseInt(portRaw, 10) : null,
         database,

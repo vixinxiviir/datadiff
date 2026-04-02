@@ -1,6 +1,8 @@
 pub mod csv;
 pub mod sqlserver;
 pub mod postgres;
+pub mod sqlite;
+pub mod mysql;
 pub mod profiles;
 
 use polars::prelude::DataFrame;
@@ -34,6 +36,22 @@ pub enum SourceConfig {
         /// Either a bare table/schema reference ("public.customers") or a full SELECT query.
         query: String,
     },
+    Sqlite {
+        /// Path to the .db / .sqlite file.
+        path: String,
+        /// Either a bare table name ("customers") or a full SELECT query.
+        query: String,
+    },
+    Mysql {
+        host: String,
+        /// Defaults to 3306 when omitted.
+        port: Option<u16>,
+        database: String,
+        username: String,
+        password: String,
+        /// Either a bare table/schema reference ("customers") or a full SELECT query.
+        query: String,
+    },
 }
 
 impl SourceConfig {
@@ -46,6 +64,12 @@ impl SourceConfig {
             }
             SourceConfig::Postgres { host, port, database, query, .. } => {
                 format!("{}:{}/{}/{}", host, port.unwrap_or(5432), database, query)
+            }
+            SourceConfig::Sqlite { path, query } => {
+                format!("{}/{}", path, query)
+            }
+            SourceConfig::Mysql { host, port, database, query, .. } => {
+                format!("{}:{}/{}/{}", host, port.unwrap_or(3306), database, query)
             }
         }
     }
@@ -96,6 +120,17 @@ pub async fn load_source(config: &SourceConfig) -> Result<DataFrame, ConnectorEr
         }
         SourceConfig::Postgres { host, port, database, username, password, query } => {
             postgres::load_async(host, port.unwrap_or(5432), database, username, password, query)
+                .await
+        }
+        SourceConfig::Sqlite { path, query } => {
+            let path = path.clone();
+            let query = query.clone();
+            tokio::task::spawn_blocking(move || sqlite::load(&path, &query))
+                .await
+                .map_err(|e| ConnectorError::QueryFailed(format!("Task join error: {}", e)))?
+        }
+        SourceConfig::Mysql { host, port, database, username, password, query } => {
+            mysql::load_async(host, port.unwrap_or(3306), database, username, password, query)
                 .await
         }
     }
