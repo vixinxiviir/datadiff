@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=DataDiff
+Comment=Schema-aware CSV and database diff tool
+Exec=datadiff-gui
+Icon=datadiff
+Terminal=false
+Categories=Utility;Development;
+Keywords=csv;diff;schema;database;

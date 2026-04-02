@@ -2,6 +2,10 @@
 name = "datadiff-gui"
 version = "0.2.0"
 edition = "2021"
+description = "Tauri desktop UI for DataDiff"
+license = "GPL-3.0-only"
+repository = "https://github.com/vixinxiviir/datadiff"
+homepage = "https://github.com/vixinxiviir/datadiff"
 
 [lib]
 name = "datadiff_gui_lib"

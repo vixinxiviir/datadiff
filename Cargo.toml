@@ -2,6 +2,13 @@
 name = "datadiff"
 version = "0.2.0"
 edition = "2021"
+description = "Schema-aware data diff tool with a Rust CLI and Tauri desktop UI"
+license = "GPL-3.0-only"
+repository = "https://github.com/vixinxiviir/datadiff"
+homepage = "https://github.com/vixinxiviir/datadiff"
+readme = "README.md"
+keywords = ["diff", "csv", "schema", "database", "tauri"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "datadiff"

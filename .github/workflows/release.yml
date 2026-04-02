@@ -1,0 +1,122 @@
+name: release
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            cmake \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libsoup-3.0-dev \
+            libssl-dev \
+            librsvg2-dev \
+            pkg-config
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Prefetch Rust dependencies
+        run: |
+          cargo fetch --locked
+          cargo fetch --locked --manifest-path tauri-app/src-tauri/Cargo.toml
+
+      - name: Check CLI crate
+        run: cargo check --frozen --locked
+
+      - name: Check Tauri app crate
+        run: cargo check --frozen --locked --manifest-path tauri-app/src-tauri/Cargo.toml
+
+      - name: Validate desktop entry
+        run: |
+          sudo apt-get install -y desktop-file-utils
+          desktop-file-validate packaging/aur/datadiff.desktop
+
+  linux-artifacts:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: check
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            cmake \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libsoup-3.0-dev \
+            libssl-dev \
+            librsvg2-dev \
+            pkg-config
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Prefetch Rust dependencies
+        run: |
+          cargo fetch --locked
+          cargo fetch --locked --manifest-path tauri-app/src-tauri/Cargo.toml
+
+      - name: Create vendor archive
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cargo vendor --locked --versioned-dirs vendor --sync tauri-app/src-tauri/Cargo.toml > /tmp/vendor-config.toml
+          mkdir -p dist
+          tar --zstd -cf "dist/datadiff-vendor-${VERSION}.tar.zst" vendor
+
+      - name: Build CLI binary
+        run: cargo build --frozen --release --locked --bin datadiff
+
+      - name: Build desktop binary
+        run: cargo build --frozen --release --locked --manifest-path tauri-app/src-tauri/Cargo.toml
+
+      - name: Stage release artifacts
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          cp target/release/datadiff dist/
+          cp tauri-app/src-tauri/target/release/datadiff-gui dist/
+          cp packaging/aur/datadiff.desktop dist/
+          cp packaging/aur/PKGBUILD dist/
+          cp packaging/aur/.SRCINFO dist/
+          cp LICENSE dist/
+          curl -L -o "dist/datadiff-${VERSION}.tar.gz" "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          (
+            cd dist
+            sha256sum "datadiff-${VERSION}.tar.gz" "datadiff-vendor-${VERSION}.tar.zst" > aur-sha256sums.txt
+          )
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: datadiff-linux-${{ github.ref_name }}
+          path: dist/
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*

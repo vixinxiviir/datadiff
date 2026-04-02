@@ -1,8 +1,20 @@
 # datadiff
 
-A fast, schema-aware CLI tool for comparing CSV files and detecting structural and data differences.
+A schema-aware data diff tool with both a Rust CLI and a Tauri desktop UI.
 
-Compare schemas for breaking changes, find modified rows with configurable tolerance, and run batch comparisons across multiple file pairs with a single manifest.
+Compare schemas for breaking changes, find modified rows with configurable tolerance, and review differences through either scripted CLI workflows or an interactive desktop app.
+
+The project currently ships in two forms:
+
+- `datadiff` — the Rust command-line interface for scripted and batch workflows
+- `datadiff-gui` — the Tauri desktop app for interactive schema and data comparisons
+
+## Support Matrix
+
+| Surface | Sources | Best for |
+| --- | --- | --- |
+| `datadiff` CLI | CSV files | automation, CI checks, manifest-driven batch runs |
+| `datadiff-gui` desktop app | CSV, SQL Server, PostgreSQL, MySQL/MariaDB, SQLite | ad hoc inspection, side-by-side comparisons, saved connection profiles |
 
 ## Features
 
@@ -11,9 +23,13 @@ Compare schemas for breaking changes, find modified rows with configurable toler
 - **Batch Operations** — compare multiple file pairs in one run with a JSON or CSV manifest
 - **Policy-Driven Validation** — enforce schema contracts (required columns, forbidden removals, allowed type promotions)
 - **Flexible Output** — export results as JSON or CSV for downstream automation
+- **Desktop App** — side-by-side GUI built with Tauri for interactive schema and data diffing
+- **Database Connectors** — SQL Server, PostgreSQL, MySQL/MariaDB, and SQLite sources in the desktop app
 - **Scalable** — optimized for large datasets with early termination and column filtering
 
 ## Installation
+
+Tagged releases are the intended stable installation target. Source builds remain the most predictable cross-platform option.
 
 ### From Source
 
@@ -25,6 +41,30 @@ cargo install --path .
 
 This builds and installs the `datadiff` binary to your Cargo bin directory (usually `~/.cargo/bin`).
 
+### Desktop App From Source
+
+```bash
+cargo build --release --manifest-path tauri-app/src-tauri/Cargo.toml
+```
+
+The desktop binary is produced at `tauri-app/src-tauri/target/release/datadiff-gui` on Linux and macOS, or `datadiff-gui.exe` on Windows.
+
+### Release Artifacts
+
+When available, tagged releases may include prebuilt artifacts for the CLI, the desktop app, and packaging support files. If a release does not include a binary for your platform yet, use the source build instructions above.
+
+### Linux Runtime Dependencies
+
+The Tauri desktop build depends on the normal Linux WebKitGTK stack. On Arch Linux, the important runtime packages are:
+
+- `webkit2gtk-4.1`
+- `gtk3`
+- `libsoup3`
+- `openssl`
+- `librsvg`
+
+For source builds of the current connectors, you should also expect build-time dependencies such as `rust`, `cargo`, `clang`, and `cmake`.
+
 ### Verify Installation
 
 ```bash
@@ -32,7 +72,23 @@ datadiff --version
 datadiff --help
 ```
 
+For the desktop app, launch:
+
+```bash
+datadiff-gui
+```
+
 ## Quick Start
+
+### Desktop App
+
+Use the desktop app when you want to diff database queries or inspect changes interactively:
+
+1. Launch `datadiff-gui`.
+2. Choose the Data Diff or Schema Diff tab.
+3. Select CSV, SQL Server, PostgreSQL, MySQL/MariaDB, or SQLite for each side.
+4. For database sources, optionally save connection profiles and reuse them later.
+5. Run the comparison and inspect row-level and schema-level results side by side.
 
 ### 1. Basic Schema Comparison
 
@@ -67,9 +123,10 @@ Options:
 - `--only-columns` — compare only specific columns
 - `--numeric-tolerance` — allow numeric values to differ by this amount (e.g., `0.01` for 1%)
 - `--diffs-only` — show only modified rows, skip summary tables (much faster)
-- `--output` — directory to write JSON/CSV exports
-- `--format` — export format: `json` or `csv`
-- `--temp` — use a timestamped temp directory instead of `--output`
+- `--output` — directory to write exports; must be used together with `--format`
+- `--format` — export format: `json` or `csv`; must be used together with `--output`
+- `--temp` — write to a timestamped temp directory instead of `--output`; cannot be combined with `--output` or `--format`
+- `--json` — emit the diff payload as JSON to stdout and suppress normal terminal output
 
 Example with filters:
 
@@ -96,6 +153,11 @@ datadiff batch \
   --output ./batch_results \
   --format json
 ```
+
+Batch-specific flags:
+- `--manifest-format` — force the manifest parser to `json` or `csv` instead of inferring from file extension
+- `--fail-fast` — stop the batch on the first failed pair
+- `--diffs-only` — show compact per-pair counts rather than fuller summaries
 
 #### Manifest Format (JSON)
 
@@ -239,7 +301,8 @@ datadiff data \
   --target raw/daily_2026-03-29.csv \
   --key transaction_id \
   --diffs-only \
-  --output ./etl_check
+  --output ./etl_check \
+  --format json
 ```
 
 ### Example 3: Batch Validation After Release
@@ -272,23 +335,28 @@ datadiff batch \
 Normal when schemas match. Check file paths and CSV encoding.
 
 **Error: "CSV parsing failed"**  
-Verify CSV is valid (correct delimiters, quotes, encoding). Polars infers delimiter automatically but defaults to comma.
+Verify the input is a standard CSV with the expected delimiter, quotes, and encoding. The CLI currently documents and targets CSV inputs only.
+
+**`--output` or `--format` is rejected**  
+Use them together. The CLI requires `--output` and `--format` as a pair, while `--temp` is an alternative output mode.
 
 **Batch run fails on one pair but not others**  
-Add `--verbose` for debugging (if supported in your version), or check individual pair with `datadiff data` and the same filters.
+Run the failing pair directly with `datadiff data` using the same filters, or rerun the batch with `--fail-fast` to stop at the first failing entry.
+
+**Database sources are not available in the CLI**  
+That is expected. Database connectors currently live in the desktop app, not the `datadiff` CLI.
 
 **Type classification seems wrong**  
-Polars infers types from the first 100 rows. If your CSV has mixed types, ensure consistent formatting.
+Polars infers schema from the first 100 rows. If a CSV column contains mixed types, normalize the input first so the sampled rows reflect the full dataset.
 
 ## Contributing
 
-Contributions welcome! Please open issues for bugs or feature requests.
+Contributions are welcome. Open an issue for bugs, feature requests, or release packaging problems, and use pull requests for scoped changes.
 
 
 ## Roadmap
 
-- [ ] Database integration (Postgres, Snowflake, Databricks)
-- [ ] Desktop GUI for interactive exploration
+- [ ] Additional database connectors beyond the current SQL Server, PostgreSQL, MySQL/MariaDB, and SQLite support
 - [ ] Streaming mode for files larger than RAM
 - [ ] Plugin system for custom diff rules
 - [ ] Scheduled reports and alerting
